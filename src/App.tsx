@@ -24,7 +24,11 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/feed" element={<Home />} />
+          <Route path="/explore" element={<ExplorePage />} />
+          <Route path="/popular" element={<PopularPage />} />
+          <Route path="/saved" element={<SavedPage />} />
           <Route path="/post/:id" element={<PostDetail />} />
           <Route path="/cluster" element={<ClusterPage />} />
           <Route path="/profile" element={<ProfilePage />} />
