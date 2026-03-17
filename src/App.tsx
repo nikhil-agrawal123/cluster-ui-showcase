@@ -10,6 +10,10 @@ import ProfilePage from "./pages/ProfilePage";
 import LoginPage from "./pages/LoginPage";
 import ModerationPage from "./pages/ModerationPage";
 import NotFound from "./pages/NotFound";
+import LandingPage from "./pages/LandingPage";
+import ExplorePage from "./pages/ExplorePage";
+import PopularPage from "./pages/PopularPage";
+import SavedPage from "./pages/SavedPage";
 
 const queryClient = new QueryClient();
 
@@ -20,7 +24,11 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/feed" element={<Home />} />
+          <Route path="/explore" element={<ExplorePage />} />
+          <Route path="/popular" element={<PopularPage />} />
+          <Route path="/saved" element={<SavedPage />} />
           <Route path="/post/:id" element={<PostDetail />} />
           <Route path="/cluster" element={<ClusterPage />} />
           <Route path="/profile" element={<ProfilePage />} />

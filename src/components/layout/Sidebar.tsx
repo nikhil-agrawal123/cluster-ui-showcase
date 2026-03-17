@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 
 const navItems = [
-  { icon: Home, label: "Home Feed", path: "/" },
+  { icon: Home, label: "Home Feed", path: "/feed" },
   { icon: Compass, label: "Explore", path: "/explore" },
   { icon: TrendingUp, label: "Popular", path: "/popular" },
   { icon: Bookmark, label: "Saved Windows", path: "/saved" },
