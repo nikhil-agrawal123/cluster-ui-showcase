@@ -10,6 +10,10 @@ import ProfilePage from "./pages/ProfilePage";
 import LoginPage from "./pages/LoginPage";
 import ModerationPage from "./pages/ModerationPage";
 import NotFound from "./pages/NotFound";
+import LandingPage from "./pages/LandingPage";
+import ExplorePage from "./pages/ExplorePage";
+import PopularPage from "./pages/PopularPage";
+import SavedPage from "./pages/SavedPage";
 
 const queryClient = new QueryClient();
 
