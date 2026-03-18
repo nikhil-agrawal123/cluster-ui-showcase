@@ -1,12 +1,24 @@
-import { Search, Bell, MessageSquare, Settings, Plus } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { Search, Bell, MessageSquare, Plus, LogOut } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Navbar = () => {
-  const location = useLocation();
-  const isLoggedIn = location.pathname !== "/login";
+  const { token, profile, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const isLoggedIn = !!token;
+
+  const initials = profile?.name
+    ? profile.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()
+    : "?";
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-card/80 backdrop-blur-xl border-b border-border">
@@ -48,9 +60,17 @@ const Navbar = () => {
             </Button>
             <Link to="/profile">
               <Avatar className="h-8 w-8 border-2 border-accent cursor-pointer">
-                <AvatarFallback className="bg-accent/10 text-accent text-xs font-semibold">AR</AvatarFallback>
+                <AvatarFallback className="bg-accent/10 text-accent text-xs font-semibold">{initials}</AvatarFallback>
               </Avatar>
             </Link>
+            {profile && (
+              <span className="text-xs text-muted-foreground hidden md:inline ml-1 max-w-[100px] truncate">
+                {profile.name}
+              </span>
+            )}
+            <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive" onClick={handleLogout} title="Log out">
+              <LogOut className="h-[18px] w-[18px]" />
+            </Button>
           </div>
         ) : (
           <div className="flex items-center gap-2">
