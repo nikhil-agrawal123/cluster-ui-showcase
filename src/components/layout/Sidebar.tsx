@@ -1,4 +1,4 @@
-import { Home, Compass, TrendingUp, Bookmark, Users } from "lucide-react";
+import { Home, Compass, TrendingUp, Bookmark } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 

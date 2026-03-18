@@ -82,6 +82,76 @@ export async function getMyProfile(): Promise<UserProfileResponse> {
   return handleResponse<UserProfileResponse>(res);
 }
 
+export async function getUserProfile(uid: string): Promise<UserProfileResponse> {
+  const res = await fetch(`${API_BASE}/users/${uid}`);
+  return handleResponse<UserProfileResponse>(res);
+}
+
+export interface UserUpdatePayload {
+  name?: string;
+  bio?: string;
+  location?: string;
+}
+
+export async function updateMyProfile(payload: UserUpdatePayload): Promise<UserProfileResponse> {
+  const res = await fetch(`${API_BASE}/users/me/profile`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<UserProfileResponse>(res);
+}
+
+export async function deleteMyAccount(): Promise<any> {
+  const res = await fetch(`${API_BASE}/users/me/account`, {
+    method: "DELETE",
+    headers: { ...authHeaders() },
+  });
+  return handleResponse<any>(res);
+}
+
+// ---- User Analytics --------------------------------------------------------
+
+export async function getUserPosts(uid: string): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/users/${uid}/posts`);
+  return handleResponse<any[]>(res);
+}
+
+export async function getUserPostDistribution(uid: string): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/users/${uid}/post-distribution`);
+  return handleResponse<any[]>(res);
+}
+
+export async function getUserTopPosts(uid: string, limit = 5): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/users/${uid}/top-posts?limit=${limit}`);
+  return handleResponse<any[]>(res);
+}
+
+export async function getUserTopComments(uid: string, limit = 5): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/users/${uid}/top-comments?limit=${limit}`);
+  return handleResponse<any[]>(res);
+}
+
+export async function getUserMostDislikedPosts(uid: string, limit = 5): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/users/${uid}/most-disliked-posts?limit=${limit}`);
+  return handleResponse<any[]>(res);
+}
+
+export async function getMostActiveVerifiedUsers(limit = 5): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/users/stats/most-active-verified?limit=${limit}`);
+  return handleResponse<any[]>(res);
+}
+
+export async function getMostLikedUsers(limit = 5): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/users/stats/most-liked?limit=${limit}`);
+  return handleResponse<any[]>(res);
+}
+
+export async function getMostEngagedUsers(limit = 5): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/users/stats/most-engaged?limit=${limit}`);
+  return handleResponse<any[]>(res);
+}
+
 // ---- Posts -----------------------------------------------------------------
 
 export interface PostResponse {
@@ -130,3 +200,42 @@ export async function fetchClusters(skip = 0, limit = 50): Promise<ClusterBasic[
   const res = await fetch(`${API_BASE}/clusters/?skip=${skip}&limit=${limit}`);
   return handleResponse<ClusterBasic[]>(res);
 }
+
+// ---- Triggers (verification / dashboard) -----------------------------------
+
+export async function fetchTriggerDashboard(): Promise<any> {
+  const res = await fetch(`${API_BASE}/triggers/dashboard`);
+  return handleResponse<any>(res);
+}
+
+export async function verifyPostStatsTrigger(pid: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/triggers/verify/post-stats/${pid}`);
+  return handleResponse<any>(res);
+}
+
+export async function verifyMemberCountTrigger(cid: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/triggers/verify/member-count/${cid}`);
+  return handleResponse<any>(res);
+}
+
+export async function verifyLastActiveTrigger(uid: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/triggers/verify/last-active/${uid}`);
+  return handleResponse<any>(res);
+}
+
+export async function joinCluster(cid: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/clusters/${cid}/join`, {
+    method: "POST",
+    headers: { ...authHeaders() },
+  });
+  return handleResponse<any>(res);
+}
+
+export async function leaveCluster(cid: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/clusters/${cid}/leave`, {
+    method: "DELETE",
+    headers: { ...authHeaders() },
+  });
+  return handleResponse<any>(res);
+}
+

@@ -1,34 +1,129 @@
 import { motion, useScroll, useTransform } from "framer-motion";
-import { useRef, useState } from "react";
-import { Calendar, MapPin, Link as LinkIcon, Sparkles, Clock, Users, Grid3X3, Pencil, Search, SlidersHorizontal, ArrowRight, Plus } from "lucide-react";
+import { useRef, useState, useEffect } from "react";
+import {
+  Calendar, MapPin, Sparkles, Clock, Users, Grid3X3,
+  Pencil, Search, SlidersHorizontal, ArrowRight, Plus,
+  ThumbsUp, ThumbsDown, MessageSquare, Save, X, FileText,
+} from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { profileData } from "@/lib/mockData";
-
-const statCards = [
-  { label: "Karma Score", value: "12,450", change: "+12%", icon: Sparkles, changePositive: true },
-  { label: "Account Age", value: "2.4 Years", icon: Clock },
-  { label: "Total Clusters", value: "18", icon: Users },
-  { label: "Active Windows", value: "142", icon: Grid3X3 },
-];
-
-const windows = [
-  { title: "Prod-Ops Dashboard", lastAccessed: "2h ago", tags: ["AWS", "MONITOR"], clusters: 5 },
-  { title: "Core API Services", lastAccessed: "5h ago", tags: ["KUBERNETES", "BACKEND"], clusters: 12 },
-];
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import {
+  getUserPosts,
+  getUserPostDistribution,
+  getUserTopPosts,
+  getUserTopComments,
+  updateMyProfile,
+} from "@/lib/api";
 
 const ProfilePage = () => {
-  const [activeTab, setActiveTab] = useState("windows");
+  const { token, uid, profile, login } = useAuth();
+  const { toast } = useToast();
+
+  const [activeTab, setActiveTab] = useState("posts");
   const heroRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
   const avatarScale = useTransform(scrollYProgress, [0, 0.5], [1, 0.7]);
   const headerY = useTransform(scrollYProgress, [0, 1], [0, 50]);
 
+  // Data states
+  const [userPosts, setUserPosts] = useState<any[]>([]);
+  const [postDistribution, setPostDistribution] = useState<any[]>([]);
+  const [topPosts, setTopPosts] = useState<any[]>([]);
+  const [topComments, setTopComments] = useState<any[]>([]);
+  const [loadingTab, setLoadingTab] = useState(false);
+
+  // Edit profile states
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editBio, setEditBio] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Load data when tab changes
+  useEffect(() => {
+    if (!uid) return;
+    setLoadingTab(true);
+
+    const loadData = async () => {
+      try {
+        if (activeTab === "posts" && userPosts.length === 0) {
+          const posts = await getUserPosts(uid);
+          setUserPosts(posts);
+        }
+        if (activeTab === "analytics") {
+          const [dist, top, comments] = await Promise.all([
+            postDistribution.length === 0 ? getUserPostDistribution(uid) : Promise.resolve(postDistribution),
+            topPosts.length === 0 ? getUserTopPosts(uid, 5) : Promise.resolve(topPosts),
+            topComments.length === 0 ? getUserTopComments(uid, 5) : Promise.resolve(topComments),
+          ]);
+          setPostDistribution(dist);
+          setTopPosts(top);
+          setTopComments(comments);
+        }
+      } catch (err: any) {
+        console.error("Failed to load tab data:", err);
+      } finally {
+        setLoadingTab(false);
+      }
+    };
+    loadData();
+  }, [activeTab, uid]);
+
+  const startEditing = () => {
+    setEditName(profile?.name || "");
+    setEditBio(profile?.bio || "");
+    setEditLocation(profile?.location || "");
+    setEditing(true);
+  };
+
+  const saveProfile = async () => {
+    setSaving(true);
+    try {
+      await updateMyProfile({
+        name: editName,
+        bio: editBio,
+        location: editLocation,
+      });
+      toast({ title: "Profile updated!", description: "Your changes have been saved." });
+      setEditing(false);
+      // Re-fetch profile by re-triggering auth context  
+      window.location.reload();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!token || !profile) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <div className="flex items-center justify-center h-[60vh]">
+          <p className="text-muted-foreground">Please log in to view your profile.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const initials = profile.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  const joinedDate = new Date(profile.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const lastActive = new Date(profile.last_active).toLocaleString();
+
+  const statCards = [
+    { label: "Total Posts", value: userPosts.length || "—", icon: FileText },
+    { label: "Last Active", value: lastActive.split(",")[0], icon: Clock },
+    { label: "Post Clusters", value: postDistribution.length || "—", icon: Users },
+    { label: "Member Since", value: joinedDate, icon: Calendar },
+  ];
+
   const tabs = [
-    { id: "windows", label: "My Windows", icon: Grid3X3 },
-    { id: "clusters", label: "My Clusters", icon: Sparkles },
+    { id: "posts", label: "My Posts", icon: Grid3X3 },
+    { id: "analytics", label: "Analytics", icon: Sparkles },
     { id: "settings", label: "Settings", icon: SlidersHorizontal },
   ];
 
@@ -36,7 +131,7 @@ const ProfilePage = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
 
-      {/* Profile Header with parallax */}
+      {/* Profile Header */}
       <div ref={heroRef}>
         <motion.div style={{ y: headerY }} className="max-w-[1000px] mx-auto px-4 lg:px-6 pt-8">
           <motion.div
@@ -49,10 +144,7 @@ const ProfilePage = () => {
               <motion.div style={{ scale: avatarScale }} className="origin-top-left">
                 <div className="relative">
                   <div className="w-28 h-28 rounded-2xl bg-gradient-to-br from-accent/20 to-accent/40 flex items-center justify-center ring-4 ring-accent/20">
-                    <span className="text-3xl font-bold text-accent">AR</span>
-                  </div>
-                  <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-success rounded-full border-2 border-card flex items-center justify-center">
-                    <span className="text-[8px] text-success-foreground">✓</span>
+                    <span className="text-3xl font-bold text-accent">{initials}</span>
                   </div>
                 </div>
               </motion.div>
@@ -60,22 +152,72 @@ const ProfilePage = () => {
               <div className="flex-1">
                 <div className="flex items-start justify-between">
                   <div>
-                    <div className="flex items-center gap-3">
-                      <h1 className="text-2xl font-bold text-foreground">{profileData.name}</h1>
-                      <span className="text-xs font-semibold text-accent bg-accent/10 px-2.5 py-1 rounded-full">PRO PLAN</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-1 max-w-md">{profileData.bio}</p>
+                    {editing ? (
+                      <div className="space-y-2">
+                        <Input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="h-9 text-lg font-bold rounded-lg bg-muted border-0"
+                          placeholder="Name"
+                        />
+                        <Input
+                          value={editBio}
+                          onChange={(e) => setEditBio(e.target.value)}
+                          className="h-9 text-sm rounded-lg bg-muted border-0"
+                          placeholder="Bio"
+                        />
+                        <Input
+                          value={editLocation}
+                          onChange={(e) => setEditLocation(e.target.value)}
+                          className="h-9 text-sm rounded-lg bg-muted border-0"
+                          placeholder="Location"
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <h1 className="text-2xl font-bold text-foreground">{profile.name}</h1>
+                        <p className="text-sm text-muted-foreground mt-1 max-w-md">{profile.bio || "No bio yet"}</p>
+                      </>
+                    )}
                   </div>
-                  <Button variant="outline" className="hidden sm:flex items-center gap-2 rounded-xl border-accent text-accent hover:bg-accent hover:text-accent-foreground">
-                    <Pencil className="h-4 w-4" />
-                    Edit Profile
-                  </Button>
+                  {editing ? (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setEditing(false)}
+                        className="rounded-lg gap-1.5"
+                      >
+                        <X className="h-3.5 w-3.5" /> Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={saveProfile}
+                        disabled={saving}
+                        className="bg-accent text-accent-foreground hover:bg-accent/90 rounded-lg gap-1.5"
+                      >
+                        <Save className="h-3.5 w-3.5" /> {saving ? "Saving…" : "Save"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      className="hidden sm:flex items-center gap-2 rounded-xl border-accent text-accent hover:bg-accent hover:text-accent-foreground"
+                      onClick={startEditing}
+                    >
+                      <Pencil className="h-4 w-4" /> Edit Profile
+                    </Button>
+                  )}
                 </div>
-                <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground flex-wrap">
-                  <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" />Joined {profileData.joined}</span>
-                  <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{profileData.location}</span>
-                  <a href="#" className="flex items-center gap-1 text-accent hover:underline"><LinkIcon className="h-3.5 w-3.5" />{profileData.website}</a>
-                </div>
+                {!editing && (
+                  <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground flex-wrap">
+                    <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" />Joined {joinedDate}</span>
+                    {profile.location && (
+                      <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{profile.location}</span>
+                    )}
+                    <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" />Active {lastActive}</span>
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
@@ -98,11 +240,6 @@ const ProfilePage = () => {
                 <stat.icon className="h-4 w-4 text-accent" />
               </div>
               <p className="text-2xl font-bold text-foreground tabular-nums">{stat.value}</p>
-              {stat.change && (
-                <p className={`text-xs mt-1 font-medium ${stat.changePositive ? "text-success" : "text-destructive"}`}>
-                  📈 {stat.change} from yesterday
-                </p>
-              )}
             </motion.div>
           ))}
         </div>
@@ -130,76 +267,174 @@ const ProfilePage = () => {
           </div>
 
           <div className="p-6">
-            {activeTab === "windows" && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.2 }}
-              >
+            {/* Posts Tab */}
+            {activeTab === "posts" && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
                 <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-lg font-semibold text-foreground">Recent Windows</h2>
-                  <div className="flex gap-2">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input placeholder="Search windows..." className="pl-9 h-9 w-56 rounded-lg bg-muted border-0 text-sm" />
-                    </div>
-                    <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg">
-                      <SlidersHorizontal className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  <h2 className="text-lg font-semibold text-foreground">
+                    Your Posts ({userPosts.length})
+                  </h2>
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {windows.map((w) => (
+                {loadingTab && <p className="text-sm text-muted-foreground text-center py-8">Loading…</p>}
+                {!loadingTab && userPosts.length === 0 && (
+                  <p className="text-muted-foreground text-center py-12">You haven't posted anything yet.</p>
+                )}
+                <div className="space-y-3">
+                  {userPosts.slice(0, 20).map((post: any, i: number) => (
                     <motion.div
-                      key={w.title}
-                      whileHover={{ y: -2 }}
-                      className="bg-muted/50 rounded-xl p-4 border border-border hover:shadow-surface transition-all cursor-pointer"
+                      key={i}
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.03 }}
+                      className="bg-muted/50 rounded-xl p-4 border border-border hover:shadow-surface transition-all"
                     >
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
-                          <Grid3X3 className="h-5 w-5 text-accent" />
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-foreground leading-relaxed line-clamp-2">
+                            {post[2] || post.content || "(no content)"}
+                          </p>
+                          <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <ThumbsUp className="h-3 w-3" /> {post[3] ?? post.likes ?? 0}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <ThumbsDown className="h-3 w-3" /> {post[4] ?? post.dislikes ?? 0}
+                            </span>
+                            <span>{post[5] || post.created_at || ""}</span>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="text-sm font-semibold text-foreground">{w.title}</h3>
-                          <p className="text-xs text-muted-foreground">Last accessed {w.lastAccessed}</p>
-                        </div>
-                      </div>
-                      <div className="flex gap-1.5 mb-3">
-                        {w.tags.map((tag) => (
-                          <span key={tag} className="text-[10px] font-semibold bg-accent/10 text-accent px-2 py-0.5 rounded">{tag}</span>
-                        ))}
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground">{w.clusters} Active Clusters</span>
-                        <button className="text-xs font-medium text-accent flex items-center gap-1 hover:underline">
-                          Open <ArrowRight className="h-3 w-3" />
-                        </button>
                       </div>
                     </motion.div>
                   ))}
-
-                  {/* New Window */}
-                  <motion.div
-                    whileHover={{ y: -2 }}
-                    className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border p-8 cursor-pointer hover:border-accent/40 transition-colors"
-                  >
-                    <Plus className="h-8 w-8 text-muted-foreground mb-2" />
-                    <span className="text-sm font-medium text-muted-foreground">New Window</span>
-                  </motion.div>
                 </div>
               </motion.div>
             )}
 
-            {activeTab === "clusters" && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12">
-                <p className="text-muted-foreground">This space is currently quiet. Start the conversation.</p>
+            {/* Analytics Tab */}
+            {activeTab === "analytics" && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
+                {loadingTab && <p className="text-sm text-muted-foreground text-center py-8">Loading analytics…</p>}
+
+                {/* Post Distribution */}
+                {!loadingTab && postDistribution.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                      <Users className="h-4 w-4 text-accent" /> Post Distribution Across Clusters
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {postDistribution.map((item: any, i: number) => (
+                        <div key={i} className="bg-muted/50 rounded-lg p-3 flex items-center justify-between border border-border">
+                          <span className="text-sm text-foreground font-medium truncate">
+                            {item[0] || item.cluster_name || `Cluster #${i + 1}`}
+                          </span>
+                          <span className="text-sm font-bold text-accent tabular-nums">
+                            {item[1] || item.post_count || 0} posts
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Top Posts */}
+                {!loadingTab && topPosts.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                      <ThumbsUp className="h-4 w-4 text-accent" /> Top Liked Posts
+                    </h3>
+                    <div className="space-y-2">
+                      {topPosts.map((post: any, i: number) => (
+                        <div key={i} className="bg-muted/50 rounded-lg p-3 border border-border">
+                          <p className="text-sm text-foreground line-clamp-1">
+                            {post[1] || post.content || "(no content)"}
+                          </p>
+                          <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1 text-accent font-medium">
+                              <ThumbsUp className="h-3 w-3" /> {post[2] ?? post.likes ?? 0} likes
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Top Comments */}
+                {!loadingTab && topComments.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-accent" /> Top Comments
+                    </h3>
+                    <div className="space-y-2">
+                      {topComments.map((comment: any, i: number) => (
+                        <div key={i} className="bg-muted/50 rounded-lg p-3 border border-border">
+                          <p className="text-sm text-foreground line-clamp-2">
+                            {comment[1] || comment.content || "(no content)"}
+                          </p>
+                          <span className="text-xs text-accent font-medium mt-1 inline-flex items-center gap-1">
+                            <ThumbsUp className="h-3 w-3" /> {comment[2] ?? comment.likes ?? 0} likes
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!loadingTab && topPosts.length === 0 && postDistribution.length === 0 && (
+                  <p className="text-muted-foreground text-center py-12">
+                    Not enough data for analytics yet. Start posting!
+                  </p>
+                )}
               </motion.div>
             )}
 
+            {/* Settings Tab */}
             {activeTab === "settings" && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12">
-                <p className="text-muted-foreground">Settings panel coming soon.</p>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground mb-3">Profile Information</h3>
+                  <div className="grid gap-4">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Name</label>
+                      <Input
+                        value={editName || profile.name}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="h-10 rounded-lg bg-muted border-0 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Bio</label>
+                      <Input
+                        value={editBio || profile.bio || ""}
+                        onChange={(e) => setEditBio(e.target.value)}
+                        className="h-10 rounded-lg bg-muted border-0 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Location</label>
+                      <Input
+                        value={editLocation || profile.location || ""}
+                        onChange={(e) => setEditLocation(e.target.value)}
+                        className="h-10 rounded-lg bg-muted border-0 text-sm"
+                      />
+                    </div>
+                    <Button
+                      onClick={saveProfile}
+                      disabled={saving}
+                      className="bg-accent text-accent-foreground hover:bg-accent/90 rounded-xl w-fit gap-2"
+                    >
+                      <Save className="h-4 w-4" />
+                      {saving ? "Saving…" : "Save Changes"}
+                    </Button>
+                  </div>
+                </div>
+                <div className="border-t border-border pt-6">
+                  <h3 className="text-sm font-semibold text-destructive mb-2">Danger Zone</h3>
+                  <p className="text-xs text-muted-foreground mb-3">Once you delete your account, there is no going back.</p>
+                  <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10 rounded-xl text-sm">
+                    Delete Account
+                  </Button>
+                </div>
               </motion.div>
             )}
           </div>
