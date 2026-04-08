@@ -32,7 +32,7 @@ const PostCard = ({ post }: { post: PostData }) => {
       className="group bg-card rounded-xl shadow-surface hover:shadow-surface-hover transition-shadow duration-200"
     >
       <div className="p-4 flex gap-3">
-        <VoteControl count={post.votes} />
+        <VoteControl count={post.votes} postId={post.id} />
         <div className="flex-1 min-w-0 space-y-2">
           <header className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
             <Link to="/cluster" className="font-semibold text-accent hover:underline underline-offset-4">

@@ -1,23 +1,40 @@
 import { useState } from "react";
 import { ChevronUp, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { reactToPost } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface VoteControlProps {
   count: number;
   vertical?: boolean;
+  postId?: string;
 }
 
-const VoteControl = ({ count, vertical = true }: VoteControlProps) => {
+const VoteControl = ({ count, vertical = true, postId }: VoteControlProps) => {
   const [votes, setVotes] = useState(count);
   const [voted, setVoted] = useState<"up" | "down" | null>(null);
+  const { uid, token } = useAuth();
 
-  const handleVote = (direction: "up" | "down") => {
+  const handleVote = async (direction: "up" | "down") => {
     if (voted === direction) {
       setVoted(null);
       setVotes(count);
     } else {
       setVoted(direction);
       setVotes(direction === "up" ? count + 1 : count - 1);
+
+      // Persist to backend
+      if (postId && uid && token) {
+        try {
+          await reactToPost(
+            postId,
+            uid,
+            direction === "up" ? "LIKE" : "DISLIKE"
+          );
+        } catch (err) {
+          console.error("Failed to save reaction:", err);
+        }
+      }
     }
   };
 

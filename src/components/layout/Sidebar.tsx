@@ -1,6 +1,8 @@
+import { useState, useEffect } from "react";
 import { Home, Compass, TrendingUp, Bookmark } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
+import { fetchClusters, type ClusterBasic } from "@/lib/api";
 
 const navItems = [
   { icon: Home, label: "Home Feed", path: "/feed" },
@@ -9,14 +11,18 @@ const navItems = [
   { icon: Bookmark, label: "Saved Windows", path: "/saved" },
 ];
 
-const myClusters = [
-  { label: "Design Systems", tag: "UI", color: "bg-blue-500" },
-  { label: "React Devs", tag: "JS", color: "bg-yellow-500" },
-  { label: "ML Research", tag: "AI", color: "bg-purple-500" },
+const TAG_COLORS = [
+  "bg-blue-500", "bg-yellow-500", "bg-purple-500", "bg-emerald-500",
+  "bg-pink-500", "bg-cyan-500", "bg-orange-500", "bg-rose-500",
 ];
 
 const Sidebar = () => {
   const location = useLocation();
+  const [clusters, setClusters] = useState<ClusterBasic[]>([]);
+
+  useEffect(() => {
+    fetchClusters(0, 6).then(setClusters).catch(console.error);
+  }, []);
 
   return (
     <aside className="w-60 shrink-0 hidden lg:block">
@@ -44,22 +50,25 @@ const Sidebar = () => {
 
         <div>
           <h3 className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            My Clusters
+            Top Clusters
           </h3>
           <div className="space-y-1">
-            {myClusters.map((cluster) => (
-              <Link key={cluster.label} to="/cluster">
+            {clusters.map((cluster, idx) => (
+              <Link key={cluster.cid} to="/cluster">
                 <motion.div
                   whileHover={{ x: 2 }}
                   className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 >
-                  <span className={`w-6 h-6 rounded-md ${cluster.color} flex items-center justify-center text-[10px] font-bold text-primary-foreground`}>
-                    {cluster.tag}
+                  <span className={`w-6 h-6 rounded-md ${TAG_COLORS[idx % TAG_COLORS.length]} flex items-center justify-center text-[10px] font-bold text-primary-foreground`}>
+                    {cluster.name.slice(0, 2).toUpperCase()}
                   </span>
-                  {cluster.label}
+                  <span className="truncate">{cluster.name}</span>
                 </motion.div>
               </Link>
             ))}
+            {clusters.length === 0 && (
+              <p className="px-3 text-xs text-muted-foreground">Loading…</p>
+            )}
           </div>
         </div>
       </div>

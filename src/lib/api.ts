@@ -239,3 +239,68 @@ export async function leaveCluster(cid: string): Promise<any> {
   return handleResponse<any>(res);
 }
 
+// ---- Cluster details -------------------------------------------------------
+
+export interface ClusterDetailResponse {
+  cid: string;
+  name: string;
+  category: string | null;
+  is_private: boolean;
+  profile_icon: string | null;
+  description: string | null;
+  creator_uid: string;
+  created_at: string;
+  tags: string | null;
+  member_count: number;
+}
+
+export async function getClusterDetail(cid: string): Promise<ClusterDetailResponse> {
+  const res = await fetch(`${API_BASE}/clusters/${cid}`);
+  return handleResponse<ClusterDetailResponse>(res);
+}
+
+// ---- Comments for a post ---------------------------------------------------
+
+export interface CommentResponse {
+  mid: string;
+  uid: string;
+  pid: string | null;
+  parent_mid: string | null;
+  content: string;
+  created_at: string;
+  likes: number;
+  dislikes: number;
+}
+
+export async function fetchCommentsForPost(pid: string): Promise<CommentResponse[]> {
+  const res = await fetch(`${API_BASE}/comments/post/${pid}`);
+  return handleResponse<CommentResponse[]>(res);
+}
+
+export interface CommentCreatePayload {
+  uid: string;
+  content: string;
+  pid?: string;
+  parent_mid?: string;
+}
+
+export async function createComment(payload: CommentCreatePayload): Promise<CommentResponse> {
+  const res = await fetch(`${API_BASE}/comments/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<CommentResponse>(res);
+}
+
+// ---- Reactions on posts ----------------------------------------------------
+
+export async function reactToPost(pid: string, uid: string, reaction_type: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/posts/${pid}/react`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ uid, reaction_type }),
+  });
+  return handleResponse<any>(res);
+}
+

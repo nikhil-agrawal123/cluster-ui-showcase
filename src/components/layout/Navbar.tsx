@@ -23,7 +23,7 @@ const Navbar = () => {
   return (
     <header className="sticky top-0 z-50 bg-card/80 backdrop-blur-xl border-b border-border">
       <div className="max-w-[1400px] mx-auto flex items-center justify-between h-14 px-4 lg:px-6">
-        <Link to="/" className="flex items-center gap-2 shrink-0">
+        <Link to={isLoggedIn ? "/feed" : "/"} className="flex items-center gap-2 shrink-0">
           <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="8" r="3" fill="currentColor" className="text-accent-foreground" />
