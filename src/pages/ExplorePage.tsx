@@ -5,6 +5,7 @@ import Navbar from "@/components/layout/Navbar";
 import Sidebar from "@/components/layout/Sidebar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   fetchClusters,
   joinCluster,
@@ -26,19 +27,30 @@ const COLORS = [
 ];
 
 const ExplorePage = () => {
+  const [searchParams] = useSearchParams();
+  const initialQuery = searchParams.get("q") ?? "";
   const [clusters, setClusters] = useState<ClusterBasic[]>([]);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialQuery);
   const [loading, setLoading] = useState(true);
   const [joinedCids, setJoinedCids] = useState<Set<string>>(new Set());
   const [bookmarkedCids, setBookmarkedCids] = useState<Set<string>>(new Set());
   const { token } = useAuth();
   const { toast } = useToast();
 
+  // Update search when URL param changes
   useEffect(() => {
-    fetchClusters(0, 50)
+    const q = searchParams.get("q") ?? "";
+    setSearch(q);
+  }, [searchParams]);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchClusters(0, 200)
       .then(setClusters)
       .catch(console.error)
       .finally(() => setLoading(false));
+  // Re-fetch every time the page mounts so new clusters appear immediately
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -57,12 +69,18 @@ const ExplorePage = () => {
       .catch(console.error);
   }, [token]);
 
+  // Token-based fuzzy filter — splits on spaces, OR-matches any token
   const filtered = search
-    ? clusters.filter(
-        (c) =>
-          c.name.toLowerCase().includes(search.toLowerCase()) ||
-          (c.category?.toLowerCase().includes(search.toLowerCase()) ?? false)
-      )
+    ? (() => {
+        const tokens = search.toLowerCase().split(/\s+/).filter(Boolean);
+        return clusters.filter((c) =>
+          tokens.some(
+            (t) =>
+              c.name.toLowerCase().includes(t) ||
+              (c.category?.toLowerCase().includes(t) ?? false)
+          )
+        );
+      })()
     : clusters;
 
   const handleJoin = async (cid: string) => {
@@ -165,6 +183,7 @@ const ExplorePage = () => {
                     transition={{ delay: i * 0.03, duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }}
                     className="bg-card rounded-xl shadow-surface p-5 hover:shadow-surface-hover transition-shadow"
                   >
+                    <Link to={`/cluster/${c.cid}`} className="block">
                     <div className="flex items-center gap-3 mb-3">
                       <span
                         className={`w-10 h-10 rounded-lg ${COLORS[i % COLORS.length]} flex items-center justify-center text-xs font-bold text-white`}
@@ -181,6 +200,7 @@ const ExplorePage = () => {
                     <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2">
                       {c.category ? `A community focused on ${c.category} topics.` : "Explore what this cluster has to offer."}
                     </p>
+                    </Link>
                     <div className="mt-4 grid grid-cols-2 gap-2">
                       {isJoined ? (
                         <Button

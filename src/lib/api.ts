@@ -164,10 +164,30 @@ export interface PostResponse {
   created_at: string;
   likes: number;
   dislikes: number;
+  /** Present when this post has a linked Megaphone promotion record */
+  megaphone?: {
+    start_time: string;
+    end_time: string;
+    type: string;
+    is_active: boolean;
+    subscriber_count: number;
+  };
+  /** For WINDOW posts, the source post info */
+  window_origin?: {
+    origin_pid: string;
+    origin_cid: string;
+    cluster_name: string | null;
+    author_name: string | null;
+    author_uid: string;
+    content: string | null;
+    created_at: string | null;
+  };
 }
 
-export async function fetchPosts(skip = 0, limit = 50): Promise<PostResponse[]> {
-  const res = await fetch(`${API_BASE}/posts/?skip=${skip}&limit=${limit}`);
+export async function fetchPosts(skip = 0, limit = 50, cid?: string): Promise<PostResponse[]> {
+  const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
+  if (cid) params.set("cid", cid);
+  const res = await fetch(`${API_BASE}/posts/?${params}`);
   return handleResponse<PostResponse[]>(res);
 }
 
@@ -193,6 +213,39 @@ export async function createPost(payload: PostCreatePayload): Promise<PostRespon
   return handleResponse<PostResponse>(res);
 }
 
+export async function editPost(pid: string, content: string, tags?: string): Promise<PostResponse> {
+  const res = await fetch(`${API_BASE}/posts/${pid}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ content, tags }),
+  });
+  return handleResponse<PostResponse>(res);
+}
+
+export async function createMegaphone(payload: {
+  cid: string;
+  content: string;
+  tags?: string;
+  megaphone_type?: "ANNOUNCEMENT" | "POLL" | "EVENT";
+  duration_hours?: number;
+}): Promise<any> {
+  const res = await fetch(`${API_BASE}/posts/megaphone/create`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<any>(res);
+}
+
+export async function sharePostToCluster(pid: string, target_cid: string): Promise<PostResponse> {
+  const res = await fetch(`${API_BASE}/posts/${pid}/share`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ target_cid }),
+  });
+  return handleResponse<PostResponse>(res);
+}
+
 // ---- Clusters (basic list for the create-post dropdown) --------------------
 
 export interface ClusterBasic {
@@ -204,6 +257,33 @@ export interface ClusterBasic {
 export async function fetchClusters(skip = 0, limit = 50): Promise<ClusterBasic[]> {
   const res = await fetch(`${API_BASE}/clusters/?skip=${skip}&limit=${limit}`);
   return handleResponse<ClusterBasic[]>(res);
+}
+
+export async function fetchWindowOrigin(pid: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/posts/${pid}/window-origin`);
+  return handleResponse<any>(res);
+}
+
+export async function fetchMegaphoneInfo(pid: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/posts/${pid}/megaphone-info`);
+  return handleResponse<any>(res);
+}
+
+// ---- Follow graph -----------------------------------------------------------
+
+export async function fetchUserFollowers(uid: string): Promise<{ uid: string; name: string; bio: string | null }[]> {
+  const res = await fetch(`${API_BASE}/users/${uid}/followers`);
+  return handleResponse(res);
+}
+
+export async function fetchUserFollowing(uid: string): Promise<{ uid: string; name: string; bio: string | null }[]> {
+  const res = await fetch(`${API_BASE}/users/${uid}/following`);
+  return handleResponse(res);
+}
+
+export async function fetchClusterMembers(cid: string): Promise<{ uid: string; name: string; role: string }[]> {
+  const res = await fetch(`${API_BASE}/clusters/${cid}/members`);
+  return handleResponse(res);
 }
 
 // ---- Triggers (verification / dashboard) -----------------------------------
@@ -358,13 +438,13 @@ export async function reactToPost(pid: string, uid: string, reaction_type: strin
   return handleResponse<any>(res);
 }
 
-export async function reactToComment(mid: string, uid: string, reaction_type: string): Promise<any> {
+export async function reactToComment(mid: string, uid: string, reaction_type: string): Promise<{ likes: number; dislikes: number }> {
   const res = await fetch(`${API_BASE}/comments/${mid}/react`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ uid, reaction_type }),
   });
-  return handleResponse<any>(res);
+  return handleResponse<{ likes: number; dislikes: number }>(res);
 }
 
 export interface PostReactionResponse {
@@ -386,5 +466,177 @@ export async function removeMyPostReaction(pid: string): Promise<PostReactionRes
     headers: { ...authHeaders() },
   });
   return handleResponse<PostReactionResponse>(res);
+}
+
+// ---- Posts — moderator actions --------------------------------------------
+
+export async function deletePost(pid: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/posts/${pid}`, {
+    method: "DELETE",
+    headers: { ...authHeaders() },
+  });
+  return handleResponse<any>(res);
+}
+
+// ---- Comments — moderator actions -----------------------------------------
+
+export async function deleteComment(mid: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/comments/${mid}`, {
+    method: "DELETE",
+    headers: { ...authHeaders() },
+  });
+  return handleResponse<any>(res);
+}
+
+// ---- Clusters — search & membership ---------------------------------------
+
+export async function searchClusters(query: string): Promise<ClusterBasic[]> {
+  const res = await fetch(`${API_BASE}/clusters/search/${encodeURIComponent(query)}`);
+  return handleResponse<ClusterBasic[]>(res);
+}
+
+export interface ClusterMembershipStatus {
+  is_member: boolean;
+  role: string | null;
+  is_moderator: boolean;
+  is_creator: boolean;
+}
+
+export async function checkMyClusterMembership(cid: string): Promise<ClusterMembershipStatus> {
+  const res = await fetch(`${API_BASE}/clusters/${cid}/membership/me`, {
+    headers: { ...authHeaders() },
+  });
+  return handleResponse<ClusterMembershipStatus>(res);
+}
+
+export async function addClusterModerator(cid: string, uid: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/clusters/${cid}/moderators`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ uid }),
+  });
+  return handleResponse<any>(res);
+}
+
+/**
+ * Fetches full ClusterBasic info for each cluster the current user has joined.
+ * Uses the membership list endpoint then batch-fetches cluster details.
+ */
+export async function fetchMyJoinedClusters(): Promise<ClusterBasic[]> {
+  const ids = await fetchMyJoinedClusterIds();
+  if (ids.length === 0) return [];
+  const results = await Promise.allSettled(
+    ids.map((cid) =>
+      fetch(`${API_BASE}/clusters/${cid}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)
+    )
+  );
+  return results
+    .filter((r): r is PromiseFulfilledResult<any> => r.status === "fulfilled" && r.value !== null)
+    .map((r) => ({ cid: r.value.cid, name: r.value.name, category: r.value.category ?? null }));
+}
+
+// ---- Global Search ---------------------------------------------------------
+
+export interface GlobalSearchResult {
+  users: { uid: string; name: string; bio: string | null }[];
+  clusters: { cid: string; name: string; category: string | null }[];
+  posts: { pid: string; uid: string; cid: string; content: string; likes: number; dislikes: number }[];
+}
+
+export async function globalSearch(q: string): Promise<GlobalSearchResult> {
+  const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(q)}`);
+  return handleResponse<GlobalSearchResult>(res);
+}
+
+// ---- Follow / Unfollow -----------------------------------------------------
+
+export async function followUser(uid: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/users/${uid}/follow`, {
+    method: "POST",
+    headers: { ...authHeaders() },
+  });
+  return handleResponse<any>(res);
+}
+
+export async function unfollowUser(uid: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/users/${uid}/follow`, {
+    method: "DELETE",
+    headers: { ...authHeaders() },
+  });
+  return handleResponse<any>(res);
+}
+
+export async function checkFollowStatus(uid: string): Promise<{ is_following: boolean; follower_count: number }> {
+  const res = await fetch(`${API_BASE}/users/${uid}/follow/me`, {
+    headers: { ...authHeaders() },
+  });
+  return handleResponse<{ is_following: boolean; follower_count: number }>(res);
+}
+
+// ---- Public user data -------------------------------------------------------
+
+export async function getUserRecentPosts(uid: string, limit = 30): Promise<PostResponse[]> {
+  const res = await fetch(`${API_BASE}/users/${uid}/recent-posts?limit=${limit}`);
+  return handleResponse<PostResponse[]>(res);
+}
+
+export async function getUserRecentComments(uid: string, limit = 30): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/users/${uid}/recent-comments?limit=${limit}`);
+  return handleResponse<any[]>(res);
+}
+
+// ---- Comment reaction check ------------------------------------------------
+
+export async function getCommentReaction(mid: string): Promise<{ reaction_type: string | null }> {
+  const res = await fetch(`${API_BASE}/comments/${mid}/reaction/me`, {
+    headers: { ...authHeaders() },
+  });
+  return handleResponse<{ reaction_type: string | null }>(res);
+}
+
+// ---- Feed variants ---------------------------------------------------------
+
+export async function fetchMyFeed(limit = 50): Promise<PostResponse[]> {
+  const res = await fetch(`${API_BASE}/posts/me/feed?limit=${limit}`, {
+    headers: { ...authHeaders() },
+  });
+  if (!res.ok) return [];
+  const raw: any[] = await res.json();
+  // Normalise the tuple/object shape returned by the service
+  return raw.map((item) => {
+    if (Array.isArray(item)) {
+      const [core, content, stats] = item;
+      return { pid: core.pid ?? item[0], uid: core.uid ?? item[1], cid: core.cid ?? item[2], type: core.type ?? item[3], content: content?.content ?? item[4], tags: content?.tags ?? null, created_at: core.created_at ?? item[5], likes: stats?.likes ?? 0, dislikes: stats?.dislikes ?? 0 };
+    }
+    return item as PostResponse;
+  });
+}
+
+export async function fetchTrendingFeed(limit = 30): Promise<PostResponse[]> {
+  const res = await fetch(`${API_BASE}/posts/trending/global?limit=${limit}`);
+  if (!res.ok) return [];
+  const raw: any[] = await res.json();
+  return raw.map((item) => {
+    if (Array.isArray(item)) {
+      const [core, content, stats] = item;
+      return { pid: core.pid ?? item[0], uid: core.uid ?? item[1], cid: core.cid ?? item[2], type: core.type ?? item[3], content: content?.content ?? item[4], tags: content?.tags ?? null, created_at: core.created_at ?? item[5], likes: stats?.likes ?? 0, dislikes: stats?.dislikes ?? 0 };
+    }
+    return item as PostResponse;
+  });
+}
+
+export async function fetchActiveMegaphones(): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/posts/megaphones/active`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+// ---- User search ------------------------------------------------------------
+
+export async function searchUsers(q: string, limit = 20): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/users/search?q=${encodeURIComponent(q)}&limit=${limit}`);
+  return handleResponse<any[]>(res);
 }
 

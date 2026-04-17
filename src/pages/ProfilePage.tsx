@@ -17,7 +17,10 @@ import {
   getUserTopPosts,
   getUserTopComments,
   updateMyProfile,
+  fetchUserFollowers,
+  fetchUserFollowing,
 } from "@/lib/api";
+import { Link } from "react-router-dom";
 
 const ProfilePage = () => {
   const { token, uid, profile, login } = useAuth();
@@ -34,6 +37,8 @@ const ProfilePage = () => {
   const [postDistribution, setPostDistribution] = useState<any[]>([]);
   const [topPosts, setTopPosts] = useState<any[]>([]);
   const [topComments, setTopComments] = useState<any[]>([]);
+  const [followers, setFollowers] = useState<any[]>([]);
+  const [following, setFollowing] = useState<any[]>([]);
   const [loadingTab, setLoadingTab] = useState(false);
 
   // Edit profile states
@@ -63,6 +68,14 @@ const ProfilePage = () => {
           setPostDistribution(dist);
           setTopPosts(top);
           setTopComments(comments);
+        }
+        if (activeTab === "followers") {
+          const data = await fetchUserFollowers(uid);
+          setFollowers(data);
+        }
+        if (activeTab === "following") {
+          const data = await fetchUserFollowing(uid);
+          setFollowing(data);
         }
       } catch (err: any) {
         console.error("Failed to load tab data:", err);
@@ -123,6 +136,8 @@ const ProfilePage = () => {
 
   const tabs = [
     { id: "posts", label: "My Posts", icon: Grid3X3 },
+    { id: "followers", label: "Followers", icon: Users },
+    { id: "following", label: "Following", icon: ArrowRight },
     { id: "analytics", label: "Analytics", icon: Sparkles },
     { id: "settings", label: "Settings", icon: SlidersHorizontal },
   ];
@@ -307,6 +322,50 @@ const ProfilePage = () => {
                     </motion.div>
                   ))}
                 </div>
+              </motion.div>
+            )}
+
+            {/* Followers Tab */}
+            {activeTab === "followers" && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+                <h2 className="text-lg font-semibold text-foreground mb-4">Followers ({followers.length})</h2>
+                {loadingTab && <p className="text-sm text-muted-foreground text-center py-8">Loading…</p>}
+                {!loadingTab && followers.length === 0 && (
+                  <p className="text-muted-foreground text-center py-10">No followers yet.</p>
+                )}
+                {followers.map((u: any) => (
+                  <Link key={u.uid} to={`/user/${u.uid}`} className="flex items-center gap-3 p-3 rounded-xl bg-muted/50 border border-border hover:border-accent/40 hover:bg-muted transition-all">
+                    <div className="w-9 h-9 rounded-full bg-accent/10 flex items-center justify-center text-accent text-sm font-bold shrink-0">
+                      {u.name?.[0]?.toUpperCase() ?? "?"}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{u.name}</p>
+                      {u.bio && <p className="text-xs text-muted-foreground truncate">{u.bio}</p>}
+                    </div>
+                  </Link>
+                ))}
+              </motion.div>
+            )}
+
+            {/* Following Tab */}
+            {activeTab === "following" && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+                <h2 className="text-lg font-semibold text-foreground mb-4">Following ({following.length})</h2>
+                {loadingTab && <p className="text-sm text-muted-foreground text-center py-8">Loading…</p>}
+                {!loadingTab && following.length === 0 && (
+                  <p className="text-muted-foreground text-center py-10">You're not following anyone yet.</p>
+                )}
+                {following.map((u: any) => (
+                  <Link key={u.uid} to={`/user/${u.uid}`} className="flex items-center gap-3 p-3 rounded-xl bg-muted/50 border border-border hover:border-accent/40 hover:bg-muted transition-all">
+                    <div className="w-9 h-9 rounded-full bg-accent/10 flex items-center justify-center text-accent text-sm font-bold shrink-0">
+                      {u.name?.[0]?.toUpperCase() ?? "?"}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{u.name}</p>
+                      {u.bio && <p className="text-xs text-muted-foreground truncate">{u.bio}</p>}
+                    </div>
+                  </Link>
+                ))}
               </motion.div>
             )}
 

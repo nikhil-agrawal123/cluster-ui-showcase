@@ -32,7 +32,8 @@ const TrendingClusters = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchClusters(0, 5).then(setClusters).catch(console.error);
+    // Fetch a wider pool so we can filter out joined ones
+    fetchClusters(0, 20).then(setClusters).catch(console.error);
 
     if (!token) {
       setJoinedCids(new Set());
@@ -48,6 +49,11 @@ const TrendingClusters = () => {
       .then((items) => setBookmarkedCids(new Set(items.map((item) => item.cid))))
       .catch(console.error);
   }, [token]);
+
+  // Show only clusters the user has NOT joined (suggested)
+  const suggestedClusters = clusters
+    .filter((c) => !joinedCids.has(c.cid))
+    .slice(0, 5);
 
   const handleJoin = async (cid: string) => {
     if (!token) {
@@ -119,12 +125,12 @@ const TrendingClusters = () => {
       className="bg-card rounded-xl shadow-surface p-4"
     >
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-foreground">Trending Clusters</h3>
-        <span className="text-[11px] font-medium text-muted-foreground">Updated live</span>
+        <h3 className="font-semibold text-foreground">Suggested Clusters</h3>
+        <span className="text-[11px] font-medium text-muted-foreground">Discover new</span>
       </div>
 
       <div className="space-y-2.5">
-        {clusters.map((c, idx) => {
+        {suggestedClusters.map((c, idx) => {
           const isJoined = joinedCids.has(c.cid);
           const isBookmarked = bookmarkedCids.has(c.cid);
           return (
@@ -190,7 +196,11 @@ const TrendingClusters = () => {
             </div>
           );
         })}
-        {clusters.length === 0 && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {suggestedClusters.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center py-2">
+            {clusters.length === 0 ? "Loading…" : "You've joined all available clusters! 🎉"}
+          </p>
+        )}
       </div>
       <Link to="/explore">
         <button className="w-full text-center text-sm text-accent font-medium mt-4 hover:underline">

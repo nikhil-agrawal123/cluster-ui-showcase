@@ -1,14 +1,16 @@
 import { useState, useEffect } from "react";
-import { Home, Compass, TrendingUp, Bookmark } from "lucide-react";
+import { Home, Compass, Flame, Bookmark, Users, Search } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import { fetchClusters, type ClusterBasic } from "@/lib/api";
+import { fetchClusters, fetchMyJoinedClusters, type ClusterBasic } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navItems = [
-  { icon: Home, label: "Home Feed", path: "/feed" },
+  { icon: Home, label: "My Feed", path: "/feed" },
+  { icon: Flame, label: "Trending", path: "/feed?tab=trending" },
   { icon: Compass, label: "Explore", path: "/explore" },
-  { icon: TrendingUp, label: "Popular", path: "/popular" },
-  { icon: Bookmark, label: "Saved Windows", path: "/saved" },
+  { icon: Search, label: "Search", path: "/search" },
+  { icon: Bookmark, label: "Saved", path: "/saved" },
 ];
 
 const TAG_COLORS = [
@@ -18,11 +20,23 @@ const TAG_COLORS = [
 
 const Sidebar = () => {
   const location = useLocation();
-  const [clusters, setClusters] = useState<ClusterBasic[]>([]);
+  const { token } = useAuth();
+  const [topClusters, setTopClusters] = useState<ClusterBasic[]>([]);
+  const [myClusters, setMyClusters] = useState<ClusterBasic[]>([]);
 
+  // Load top clusters (always)
   useEffect(() => {
-    fetchClusters(0, 6).then(setClusters).catch(console.error);
+    fetchClusters(0, 6).then(setTopClusters).catch(console.error);
   }, []);
+
+  // Load my joined clusters only when logged in
+  useEffect(() => {
+    if (!token) {
+      setMyClusters([]);
+      return;
+    }
+    fetchMyJoinedClusters().then(setMyClusters).catch(console.error);
+  }, [token]);
 
   return (
     <aside className="w-60 shrink-0 hidden lg:block">
@@ -48,13 +62,43 @@ const Sidebar = () => {
           })}
         </nav>
 
+        {/* My Clusters — shown only when logged in */}
+        {token && (
+          <div>
+            <h3 className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Users className="h-3 w-3" /> My Clusters
+            </h3>
+            <div className="space-y-1">
+              {myClusters.map((cluster, idx) => (
+                <Link key={cluster.cid} to={`/cluster/${cluster.cid}`}>
+                  <motion.div
+                    whileHover={{ x: 2 }}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  >
+                    <span className={`w-6 h-6 rounded-md ${TAG_COLORS[idx % TAG_COLORS.length]} flex items-center justify-center text-[10px] font-bold text-primary-foreground`}>
+                      {cluster.name.slice(0, 2).toUpperCase()}
+                    </span>
+                    <span className="truncate">{cluster.name}</span>
+                  </motion.div>
+                </Link>
+              ))}
+              {myClusters.length === 0 && (
+                <p className="px-3 text-xs text-muted-foreground">
+                  <Link to="/explore" className="text-accent hover:underline">Explore</Link> and join clusters.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Top Clusters */}
         <div>
           <h3 className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
             Top Clusters
           </h3>
           <div className="space-y-1">
-            {clusters.map((cluster, idx) => (
-              <Link key={cluster.cid} to="/cluster">
+            {topClusters.map((cluster, idx) => (
+              <Link key={cluster.cid} to={`/cluster/${cluster.cid}`}>
                 <motion.div
                   whileHover={{ x: 2 }}
                   className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
@@ -66,7 +110,7 @@ const Sidebar = () => {
                 </motion.div>
               </Link>
             ))}
-            {clusters.length === 0 && (
+            {topClusters.length === 0 && (
               <p className="px-3 text-xs text-muted-foreground">Loading…</p>
             )}
           </div>

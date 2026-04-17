@@ -15,6 +15,8 @@ import LandingPage from "./pages/LandingPage";
 import ExplorePage from "./pages/ExplorePage";
 import PopularPage from "./pages/PopularPage";
 import SavedPage from "./pages/SavedPage";
+import SearchPage from "./pages/SearchPage";
+import UserPublicProfilePage from "./pages/UserPublicProfilePage";
 
 const queryClient = new QueryClient();
 
@@ -31,9 +33,12 @@ const App = () => (
             <Route path="/explore" element={<ExplorePage />} />
             <Route path="/popular" element={<PopularPage />} />
             <Route path="/saved" element={<SavedPage />} />
+            <Route path="/search" element={<SearchPage />} />
             <Route path="/post/:id" element={<PostDetail />} />
-            <Route path="/cluster" element={<ClusterPage />} />
+            <Route path="/cluster/:id" element={<ClusterPage />} />
+            <Route path="/cluster" element={<ExplorePage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/user/:uid" element={<UserPublicProfilePage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/moderation" element={<ModerationPage />} />
 
