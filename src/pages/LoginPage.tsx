@@ -19,22 +19,39 @@ const LoginPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
+
+    const cleanName = name.trim();
+    const cleanEmail = email.trim();
+    const cleanPassword = password.trim();
+
+    if (isSignUp && !cleanName) {
+      toast({ title: "Name required", description: "Please enter a display name.", variant: "destructive" });
+      return;
+    }
+
+    if (!cleanEmail || !isValidEmail(cleanEmail)) {
+      toast({ title: "Invalid email", description: "Please enter a valid email address.", variant: "destructive" });
+      return;
+    }
+
+    if (!cleanPassword || cleanPassword.length < 6) {
+      toast({ title: "Weak password", description: "Password must be at least 6 characters.", variant: "destructive" });
+      return;
+    }
+
     setSubmitting(true);
 
     try {
       if (isSignUp) {
-        if (!name.trim()) {
-          toast({ title: "Name required", description: "Please enter a display name.", variant: "destructive" });
-          setSubmitting(false);
-          return;
-        }
-        await signup({ name, email, password });
+        await signup({ name: cleanName, email: cleanEmail, password: cleanPassword });
         toast({ title: "Account created!", description: "Welcome to Cluster." });
       } else {
-        await login(email, password);
+        await login(cleanEmail, cleanPassword);
         toast({ title: "Logged in!", description: "Welcome back." });
       }
       navigate("/feed");

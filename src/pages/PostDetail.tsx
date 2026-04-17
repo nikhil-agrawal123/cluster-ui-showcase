@@ -71,7 +71,7 @@ const PostDetail = () => {
             {/* Engagement */}
             <div className="flex items-center gap-3 py-4 border-t border-border">
               <div className="flex items-center gap-1">
-                <VoteControl count={post.votes} vertical={false} />
+                <VoteControl count={post.votes} vertical={false} postId={post.id} />
               </div>
               <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground px-3 py-1.5 rounded-full bg-muted">
                 <MessageSquare className="h-4 w-4" />

@@ -16,6 +16,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
 
+const CATEGORY_ACCENTS = [
+  "from-blue-500/15 to-cyan-500/15",
+  "from-emerald-500/15 to-lime-500/15",
+  "from-amber-500/15 to-orange-500/15",
+  "from-rose-500/15 to-pink-500/15",
+  "from-indigo-500/15 to-violet-500/15",
+];
+
 const TrendingClusters = () => {
   const [clusters, setClusters] = useState<ClusterBasic[]>([]);
   const [joinedCids, setJoinedCids] = useState<Set<string>>(new Set());
@@ -110,57 +118,74 @@ const TrendingClusters = () => {
       transition={{ delay: 0.1, duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
       className="bg-card rounded-xl shadow-surface p-4"
     >
-      <h3 className="font-semibold text-foreground mb-4">Trending Clusters</h3>
-      <div className="space-y-3">
-        {clusters.map((c) => {
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-foreground">Trending Clusters</h3>
+        <span className="text-[11px] font-medium text-muted-foreground">Updated live</span>
+      </div>
+
+      <div className="space-y-2.5">
+        {clusters.map((c, idx) => {
           const isJoined = joinedCids.has(c.cid);
           const isBookmarked = bookmarkedCids.has(c.cid);
           return (
-            <div key={c.cid} className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
-                  {c.name[0]?.toUpperCase() ?? "?"}
+            <div
+              key={c.cid}
+              className="rounded-xl border border-border/70 bg-gradient-to-r p-3 transition-colors hover:border-accent/40"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${CATEGORY_ACCENTS[idx % CATEGORY_ACCENTS.length]} flex items-center justify-center text-xs font-bold text-foreground border border-border/60`}>
+                    {c.name[0]?.toUpperCase() ?? "?"}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">c/{c.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{c.category ?? "General"}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">c/{c.name}</p>
-                  <p className="text-xs text-muted-foreground">{c.category ?? "General"}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
+
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7"
+                  className={`h-8 w-8 rounded-full ${isBookmarked ? "text-accent bg-accent/10" : "text-muted-foreground"}`}
                   onClick={() => handleToggleBookmark(c.cid)}
                   aria-label={isBookmarked ? "Remove bookmark" : "Bookmark cluster"}
                 >
-                  {isBookmarked ? <BookmarkCheck className="h-4 w-4 text-accent" /> : <Bookmark className="h-4 w-4" />}
+                  {isBookmarked ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
                 </Button>
+              </div>
 
-                {isJoined ? (
-                  <div className="flex items-center gap-2">
-                    <span className="h-7 text-xs text-green-500 font-medium flex items-center gap-1 px-1">
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <span className={`text-xs font-medium ${isJoined ? "text-green-600" : "text-muted-foreground"}`}>
+                  {isJoined ? (
+                    <span className="inline-flex items-center gap-1">
                       <Check className="h-3.5 w-3.5" /> Joined
                     </span>
+                  ) : (
+                    "Not joined"
+                  )}
+                </span>
+
+                <div className="flex items-center gap-2">
+                  {isJoined ? (
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-7 text-xs rounded-full px-3"
+                      className="h-8 text-xs rounded-full px-3"
                       onClick={() => handleLeave(c.cid)}
                     >
                       Leave
                     </Button>
-                  </div>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs border-accent text-accent hover:bg-accent hover:text-accent-foreground rounded-full px-4"
-                    onClick={() => handleJoin(c.cid)}
-                  >
-                    Join
-                  </Button>
-                )}
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs border-accent text-accent hover:bg-accent hover:text-accent-foreground rounded-full px-4"
+                      onClick={() => handleJoin(c.cid)}
+                    >
+                      Join
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           );

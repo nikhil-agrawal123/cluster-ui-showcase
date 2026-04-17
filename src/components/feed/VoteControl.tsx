@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronUp, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { reactToPost } from "@/lib/api";
@@ -11,29 +11,53 @@ interface VoteControlProps {
 }
 
 const VoteControl = ({ count, vertical = true, postId }: VoteControlProps) => {
-  const [votes, setVotes] = useState(count);
   const [voted, setVoted] = useState<"up" | "down" | null>(null);
   const { uid, token } = useAuth();
 
-  const handleVote = async (direction: "up" | "down") => {
-    if (voted === direction) {
-      setVoted(null);
-      setVotes(count);
-    } else {
-      setVoted(direction);
-      setVotes(direction === "up" ? count + 1 : count - 1);
+  const storageKey = useMemo(() => {
+    if (!postId) return null;
+    const voter = uid ?? "anon";
+    return `cluster:post-vote:${voter}:${postId}`;
+  }, [postId, uid]);
 
-      // Persist to backend
-      if (postId && uid && token) {
-        try {
-          await reactToPost(
-            postId,
-            uid,
-            direction === "up" ? "LIKE" : "DISLIKE"
-          );
-        } catch (err) {
-          console.error("Failed to save reaction:", err);
-        }
+  useEffect(() => {
+    if (!storageKey) {
+      setVoted(null);
+      return;
+    }
+    const saved = localStorage.getItem(storageKey);
+    if (saved === "up" || saved === "down") {
+      setVoted(saved);
+      return;
+    }
+    setVoted(null);
+  }, [storageKey]);
+
+  const votes = count + (voted === "up" ? 1 : voted === "down" ? -1 : 0);
+
+  const handleVote = async (direction: "up" | "down") => {
+    const nextVote = voted === direction ? null : direction;
+    setVoted(nextVote);
+
+    if (storageKey) {
+      if (nextVote) {
+        localStorage.setItem(storageKey, nextVote);
+      } else {
+        localStorage.removeItem(storageKey);
+      }
+    }
+
+    // Persist to backend for selected reactions.
+    // Un-vote API is not available yet, so removing a vote is UI-local for now.
+    if (nextVote && postId && uid && token) {
+      try {
+        await reactToPost(
+          postId,
+          uid,
+          nextVote === "up" ? "LIKE" : "DISLIKE"
+        );
+      } catch (err) {
+        console.error("Failed to save reaction:", err);
       }
     }
   };
