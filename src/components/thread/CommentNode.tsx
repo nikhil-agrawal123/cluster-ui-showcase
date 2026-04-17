@@ -2,19 +2,38 @@ import { useState } from "react";
 import { ThumbsUp, MessageSquare, ChevronDown, ChevronUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 
-interface Comment {
+export interface CommentNodeComment {
   id: string;
   author: string;
   timeAgo: string;
   content: string;
   likes: number;
-  replies?: Comment[];
+  replies?: CommentNodeComment[];
 }
 
-const CommentNode = ({ comment, depth = 0 }: { comment: Comment; depth?: number }) => {
+interface CommentNodeProps {
+  comment: CommentNodeComment;
+  depth?: number;
+  onReply?: (parentMid: string, content: string) => Promise<void>;
+  replyingToMid?: string | null;
+}
+
+const CommentNode = ({ comment, depth = 0, onReply, replyingToMid = null }: CommentNodeProps) => {
   const [expanded, setExpanded] = useState(true);
   const [liked, setLiked] = useState(false);
+  const [showReplyInput, setShowReplyInput] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const isReplying = replyingToMid === comment.id;
+
+  const handleReplySubmit = async () => {
+    const content = replyText.trim();
+    if (!content || !onReply) return;
+    await onReply(comment.id, content);
+    setReplyText("");
+    setShowReplyInput(false);
+  };
 
   return (
     <motion.div
@@ -46,7 +65,10 @@ const CommentNode = ({ comment, depth = 0 }: { comment: Comment; depth?: number 
                 <ThumbsUp className="h-3.5 w-3.5" />
                 <span className="tabular-nums">{liked ? comment.likes + 1 : comment.likes}</span>
               </button>
-              <button className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+              <button
+                onClick={() => setShowReplyInput((prev) => !prev)}
+                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+              >
                 <MessageSquare className="h-3.5 w-3.5" />
                 Reply
               </button>
@@ -60,13 +82,53 @@ const CommentNode = ({ comment, depth = 0 }: { comment: Comment; depth?: number 
                 </button>
               )}
             </div>
+
+            {showReplyInput && (
+              <div className="mt-3 rounded-lg border border-border bg-muted/40 p-3">
+                <textarea
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder="Write a reply..."
+                  className="w-full min-h-[64px] resize-none rounded-md border border-border bg-background px-2.5 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+                <div className="mt-2 flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => {
+                      setShowReplyInput(false);
+                      setReplyText("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={isReplying || !replyText.trim()}
+                    className="h-8 text-xs"
+                    onClick={handleReplySubmit}
+                  >
+                    {isReplying ? "Posting..." : "Reply"}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       <AnimatePresence>
         {expanded && comment.replies?.map((reply) => (
-          <CommentNode key={reply.id} comment={reply} depth={depth + 1} />
+          <CommentNode
+            key={reply.id}
+            comment={reply}
+            depth={depth + 1}
+            onReply={onReply}
+            replyingToMid={replyingToMid}
+          />
         ))}
       </AnimatePresence>
     </motion.div>
