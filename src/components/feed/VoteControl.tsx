@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronUp, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { reactToPost } from "@/lib/api";
+import { fetchMyPostReaction, reactToPost, removeMyPostReaction } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface VoteControlProps {
@@ -11,55 +11,83 @@ interface VoteControlProps {
 }
 
 const VoteControl = ({ count, vertical = true, postId }: VoteControlProps) => {
+  const [votes, setVotes] = useState(count);
   const [voted, setVoted] = useState<"up" | "down" | null>(null);
+  const [isSubmittingVote, setIsSubmittingVote] = useState(false);
   const { uid, token } = useAuth();
 
-  const storageKey = useMemo(() => {
-    if (!postId) return null;
-    const voter = uid ?? "anon";
-    return `cluster:post-vote:${voter}:${postId}`;
-  }, [postId, uid]);
+  useEffect(() => {
+    setVotes(count);
+  }, [count]);
 
   useEffect(() => {
-    if (!storageKey) {
+    if (!postId || !token) {
       setVoted(null);
       return;
     }
-    const saved = localStorage.getItem(storageKey);
-    if (saved === "up" || saved === "down") {
-      setVoted(saved);
-      return;
-    }
-    setVoted(null);
-  }, [storageKey]);
 
-  const votes = count + (voted === "up" ? 1 : voted === "down" ? -1 : 0);
+    fetchMyPostReaction(postId)
+      .then((data) => {
+        if (data.reaction === "LIKE") setVoted("up");
+        else if (data.reaction === "DISLIKE") setVoted("down");
+        else setVoted(null);
+      })
+      .catch(() => setVoted(null));
+  }, [postId, token]);
+
+  const voteDelta = (from: "up" | "down" | null, to: "up" | "down" | null) => {
+    if (from === to) return 0;
+    if (from === null && to === "up") return 1;
+    if (from === null && to === "down") return -1;
+    if (from === "up" && to === null) return -1;
+    if (from === "down" && to === null) return 1;
+    if (from === "up" && to === "down") return -1;
+    if (from === "down" && to === "up") return 0;
+    return 0;
+  };
 
   const handleVote = async (direction: "up" | "down") => {
+    if (isSubmittingVote) return;
+
+    const previousVote = voted;
     const nextVote = voted === direction ? null : direction;
-    setVoted(nextVote);
+    const delta = voteDelta(previousVote, nextVote);
 
-    if (storageKey) {
-      if (nextVote) {
-        localStorage.setItem(storageKey, nextVote);
-      } else {
-        localStorage.removeItem(storageKey);
-      }
-    }
-
-    // Persist to backend for selected reactions.
-    // Un-vote API is not available yet, so removing a vote is UI-local for now.
-    if (nextVote && postId && uid && token) {
+    if (postId && uid && token) {
       try {
-        await reactToPost(
+        setIsSubmittingVote(true);
+
+        if (nextVote === null) {
+          const response = await removeMyPostReaction(postId);
+          setVoted(null);
+          setVotes(response.likes - response.dislikes);
+          return;
+        }
+
+        const response = await reactToPost(
           postId,
           uid,
           nextVote === "up" ? "LIKE" : "DISLIKE"
         );
+
+        setVoted(nextVote);
+        if (typeof response.likes === "number" && typeof response.dislikes === "number") {
+          setVotes(response.likes - response.dislikes);
+        } else {
+          // Fallback in case backend response shape changes.
+          setVotes((prev) => prev + delta);
+        }
       } catch (err) {
         console.error("Failed to save reaction:", err);
+      } finally {
+        setIsSubmittingVote(false);
       }
+      return;
     }
+
+    // Unauthenticated/local fallback.
+    setVoted(nextVote);
+    setVotes((prev) => prev + delta);
   };
 
   const formatCount = (n: number) => {
@@ -71,6 +99,7 @@ const VoteControl = ({ count, vertical = true, postId }: VoteControlProps) => {
     <div className={`flex ${vertical ? "flex-col" : "flex-row"} items-center gap-0.5`}>
       <button
         onClick={(e) => { e.stopPropagation(); handleVote("up"); }}
+        disabled={isSubmittingVote}
         className={`p-1 rounded transition-colors ${
           voted === "up" ? "text-accent" : "text-muted-foreground hover:text-accent"
         }`}
@@ -93,6 +122,7 @@ const VoteControl = ({ count, vertical = true, postId }: VoteControlProps) => {
       </AnimatePresence>
       <button
         onClick={(e) => { e.stopPropagation(); handleVote("down"); }}
+        disabled={isSubmittingVote}
         className={`p-1 rounded transition-colors ${
           voted === "down" ? "text-destructive" : "text-muted-foreground hover:text-muted-foreground/70"
         }`}

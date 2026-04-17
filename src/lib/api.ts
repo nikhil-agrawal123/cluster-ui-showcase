@@ -353,3 +353,24 @@ export async function reactToPost(pid: string, uid: string, reaction_type: strin
   return handleResponse<any>(res);
 }
 
+export interface PostReactionResponse {
+  likes: number;
+  dislikes: number;
+  current_reaction: "LIKE" | "DISLIKE" | null;
+}
+
+export async function fetchMyPostReaction(pid: string): Promise<{ reaction: "LIKE" | "DISLIKE" | null }> {
+  const res = await fetch(`${API_BASE}/posts/${pid}/reaction/me`, {
+    headers: { ...authHeaders() },
+  });
+  return handleResponse<{ reaction: "LIKE" | "DISLIKE" | null }>(res);
+}
+
+export async function removeMyPostReaction(pid: string): Promise<PostReactionResponse> {
+  const res = await fetch(`${API_BASE}/posts/${pid}/react`, {
+    method: "DELETE",
+    headers: { ...authHeaders() },
+  });
+  return handleResponse<PostReactionResponse>(res);
+}
+
