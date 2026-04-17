@@ -239,6 +239,55 @@ export async function leaveCluster(cid: string): Promise<any> {
   return handleResponse<any>(res);
 }
 
+export async function fetchMyJoinedClusterIds(): Promise<string[]> {
+  const res = await fetch(`${API_BASE}/clusters/memberships/me`, {
+    headers: { ...authHeaders() },
+  });
+  const data = await handleResponse<{ cluster_ids: string[] }>(res);
+  return data.cluster_ids;
+}
+
+export async function bookmarkCluster(cid: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/clusters/${cid}/bookmark`, {
+    method: "POST",
+    headers: { ...authHeaders() },
+  });
+  return handleResponse<any>(res);
+}
+
+export async function unbookmarkCluster(cid: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/clusters/${cid}/bookmark`, {
+    method: "DELETE",
+    headers: { ...authHeaders() },
+  });
+  return handleResponse<any>(res);
+}
+
+export interface BookmarkedCluster {
+  cid: string;
+  name: string;
+  category: string | null;
+  bookmarked_at: string;
+  chat_enabled: boolean;
+  is_member: boolean;
+}
+
+export async function fetchMyBookmarkedClusters(): Promise<BookmarkedCluster[]> {
+  const res = await fetch(`${API_BASE}/clusters/bookmarks/me`, {
+    headers: { ...authHeaders() },
+  });
+  return handleResponse<BookmarkedCluster[]>(res);
+}
+
+export async function setClusterChatOption(cid: string, chat_enabled: boolean): Promise<any> {
+  const res = await fetch(`${API_BASE}/clusters/${cid}/chat-options`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ chat_enabled }),
+  });
+  return handleResponse<any>(res);
+}
+
 // ---- Cluster details -------------------------------------------------------
 
 export interface ClusterDetailResponse {

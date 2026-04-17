@@ -1,11 +1,20 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Compass, Search, Users, Check } from "lucide-react";
+import { Compass, Search, Users, Check, Bookmark, BookmarkCheck } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Sidebar from "@/components/layout/Sidebar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { fetchClusters, joinCluster, type ClusterBasic } from "@/lib/api";
+import {
+  fetchClusters,
+  joinCluster,
+  leaveCluster,
+  fetchMyJoinedClusterIds,
+  bookmarkCluster,
+  unbookmarkCluster,
+  fetchMyBookmarkedClusters,
+  type ClusterBasic,
+} from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
@@ -21,6 +30,7 @@ const ExplorePage = () => {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [joinedCids, setJoinedCids] = useState<Set<string>>(new Set());
+  const [bookmarkedCids, setBookmarkedCids] = useState<Set<string>>(new Set());
   const { token } = useAuth();
   const { toast } = useToast();
 
@@ -30,6 +40,22 @@ const ExplorePage = () => {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!token) {
+      setJoinedCids(new Set());
+      setBookmarkedCids(new Set());
+      return;
+    }
+
+    fetchMyJoinedClusterIds()
+      .then((cids) => setJoinedCids(new Set(cids)))
+      .catch(console.error);
+
+    fetchMyBookmarkedClusters()
+      .then((items) => setBookmarkedCids(new Set(items.map((item) => item.cid))))
+      .catch(console.error);
+  }, [token]);
 
   const filtered = search
     ? clusters.filter(
@@ -51,6 +77,50 @@ const ExplorePage = () => {
         toast({ title: "Already joined", description: "You're already a member of this cluster." });
       } else {
         toast({ title: "Joined!", description: "You're now a member of this cluster." });
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleLeave = async (cid: string) => {
+    if (!token) {
+      toast({ title: "Not logged in", description: "Please log in to leave clusters.", variant: "destructive" });
+      return;
+    }
+    try {
+      await leaveCluster(cid);
+      setJoinedCids((prev) => {
+        const next = new Set(prev);
+        next.delete(cid);
+        return next;
+      });
+      toast({ title: "Left cluster", description: "You are no longer a member of this cluster." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleToggleBookmark = async (cid: string) => {
+    if (!token) {
+      toast({ title: "Not logged in", description: "Please log in to bookmark clusters.", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const isBookmarked = bookmarkedCids.has(cid);
+      if (isBookmarked) {
+        await unbookmarkCluster(cid);
+        setBookmarkedCids((prev) => {
+          const next = new Set(prev);
+          next.delete(cid);
+          return next;
+        });
+        toast({ title: "Bookmark removed", description: "Cluster removed from bookmarks." });
+      } else {
+        await bookmarkCluster(cid);
+        setBookmarkedCids((prev) => new Set(prev).add(cid));
+        toast({ title: "Bookmarked", description: "Cluster added to bookmarks." });
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -86,6 +156,7 @@ const ExplorePage = () => {
             <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
               {filtered.map((c, i) => {
                 const isJoined = joinedCids.has(c.cid);
+                const isBookmarked = bookmarkedCids.has(c.cid);
                 return (
                   <motion.div
                     key={c.cid}
@@ -110,24 +181,40 @@ const ExplorePage = () => {
                     <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2">
                       {c.category ? `A community focused on ${c.category} topics.` : "Explore what this cluster has to offer."}
                     </p>
-                    {isJoined ? (
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      {isJoined ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs border-green-500 text-green-500 rounded-lg gap-1.5"
+                          onClick={() => handleLeave(c.cid)}
+                        >
+                          <Check className="h-3.5 w-3.5" /> Leave
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs border-accent text-accent hover:bg-accent hover:text-accent-foreground rounded-lg"
+                          onClick={() => handleJoin(c.cid)}
+                        >
+                          Join Cluster
+                        </Button>
+                      )}
+
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled
-                        className="mt-4 w-full h-8 text-xs border-green-500 text-green-500 rounded-lg gap-1.5"
+                        className="h-8 text-xs rounded-lg gap-1.5"
+                        onClick={() => handleToggleBookmark(c.cid)}
                       >
-                        <Check className="h-3.5 w-3.5" /> Joined
+                        {isBookmarked ? <BookmarkCheck className="h-3.5 w-3.5" /> : <Bookmark className="h-3.5 w-3.5" />}
+                        {isBookmarked ? "Bookmarked" : "Bookmark"}
                       </Button>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-4 w-full h-8 text-xs border-accent text-accent hover:bg-accent hover:text-accent-foreground rounded-lg"
-                        onClick={() => handleJoin(c.cid)}
-                      >
-                        Join Cluster
-                      </Button>
+                    </div>
+
+                    {isJoined && (
+                      <p className="text-[11px] text-green-600 mt-2 font-medium">You have joined this cluster.</p>
                     )}
                   </motion.div>
                 );
