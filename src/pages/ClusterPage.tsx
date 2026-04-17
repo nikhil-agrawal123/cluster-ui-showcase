@@ -115,6 +115,47 @@ const ClusterPage = () => {
     loadCluster();
   }, [id]);
 
+  // Background poll for posts
+  useEffect(() => {
+    if (!id) return;
+    const pollPosts = async () => {
+      try {
+        const clusterPosts = await fetchPosts(0, 100, id);
+        setPosts(clusterPosts);
+
+        const counts: Record<string, number> = {};
+        await Promise.all(
+          clusterPosts.map(async (post) => {
+            try {
+              const comments = await fetchCommentsForPost(post.pid);
+              counts[post.pid] = comments.length;
+            } catch {
+              counts[post.pid] = 0;
+            }
+          })
+        );
+        setCommentCounts(counts);
+
+        const uniqueUids = [...new Set(clusterPosts.map((p) => p.uid))];
+        const userMap: Record<string, string> = {};
+        await Promise.allSettled(
+          uniqueUids.map(async (u) => {
+            try {
+              const profile = await getUserProfile(u);
+              userMap[u] = profile.name;
+            } catch {
+              userMap[u] = u.slice(0, 8);
+            }
+          })
+        );
+        setUserNames(userMap);
+      } catch {}
+    };
+
+    const iv = setInterval(pollPosts, 10000);
+    return () => clearInterval(iv);
+  }, [id]);
+
   // Check membership status
   useEffect(() => {
     if (!id || !token) {
@@ -367,6 +408,7 @@ const ClusterPage = () => {
                       id: post.pid,
                       cid: post.cid,
                       uid: post.uid,
+                      viewerUid: uid ?? undefined,
                       community: cluster.name,
                       author: userNames[post.uid] ?? post.uid.slice(0, 8),
                       timeAgo: timeAgo(post.created_at),
@@ -375,6 +417,8 @@ const ClusterPage = () => {
                       votes: (post.likes ?? 0) - (post.dislikes ?? 0),
                       comments: commentCounts[post.pid] ?? 0,
                       type: post.type,
+                      megaphone: post.megaphone,
+                      window_origin: post.window_origin,
                     }}
                   />
                   {/* Moderator delete button */}

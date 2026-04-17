@@ -221,14 +221,40 @@ const MegaphoneModal = ({ clusters, onClose, onCreated, uid }: {
   const [cid, setCid] = useState(clusters[0]?.cid ?? "");
   const [megType, setMegType] = useState<"ANNOUNCEMENT" | "POLL" | "EVENT">("ANNOUNCEMENT");
   const [hours, setHours] = useState(24);
+  const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
+  const [eventStarts, setEventStarts] = useState("");
+  const [eventEnds, setEventEnds] = useState("");
+  const [eventLocation, setEventLocation] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
   const handle = async () => {
     if (!content.trim() || !cid) return;
+    if (megType === "POLL") {
+      const opts = pollOptions.map((o) => o.trim()).filter(Boolean);
+      if (opts.length < 2) {
+        toast({ title: "Poll options", description: "Add at least two choices.", variant: "destructive" });
+        return;
+      }
+    }
     setSubmitting(true);
     try {
-      await createMegaphone({ cid, content: content.trim(), tags: tags.trim() || undefined, megaphone_type: megType, duration_hours: hours });
+      const payload: Parameters<typeof createMegaphone>[0] = {
+        cid,
+        content: content.trim(),
+        tags: tags.trim() || undefined,
+        megaphone_type: megType,
+        duration_hours: hours,
+      };
+      if (megType === "POLL") {
+        payload.poll_options = pollOptions.map((o) => o.trim()).filter(Boolean);
+      }
+      if (megType === "EVENT") {
+        if (eventStarts.trim()) payload.event_starts_at = new Date(eventStarts).toISOString();
+        if (eventEnds.trim()) payload.event_ends_at = new Date(eventEnds).toISOString();
+        if (eventLocation.trim()) payload.event_location = eventLocation.trim();
+      }
+      await createMegaphone(payload);
       toast({ title: "Megaphone fired! 📣", description: "Your announcement is now pinned." });
       onCreated();
       onClose();
@@ -257,7 +283,7 @@ const MegaphoneModal = ({ clusters, onClose, onCreated, uid }: {
       <div className="grid grid-cols-2 gap-3">
         <Field>
           <Label>Type</Label>
-          <Select value={megType} onChange={(e) => setMegType(e.target.value as any)}>
+          <Select value={megType} onChange={(e) => setMegType(e.target.value as "ANNOUNCEMENT" | "POLL" | "EVENT")}>
             <option value="ANNOUNCEMENT">📢 Announcement</option>
             <option value="EVENT">🗓️ Event</option>
             <option value="POLL">📊 Poll</option>
@@ -268,6 +294,49 @@ const MegaphoneModal = ({ clusters, onClose, onCreated, uid }: {
           <Input type="number" min={1} max={720} value={hours} onChange={(e) => setHours(Number(e.target.value))} />
         </Field>
       </div>
+      {megType === "POLL" && (
+        <div className="space-y-2">
+          <Label>Poll choices</Label>
+          {pollOptions.map((opt, i) => (
+            <Input
+              key={i}
+              placeholder={`Option ${i + 1}`}
+              value={opt}
+              onChange={(e) => {
+                const next = [...pollOptions];
+                next[i] = e.target.value;
+                setPollOptions(next);
+              }}
+            />
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="rounded-lg text-xs"
+            disabled={pollOptions.length >= 10}
+            onClick={() => setPollOptions([...pollOptions, ""])}
+          >
+            Add option
+          </Button>
+        </div>
+      )}
+      {megType === "EVENT" && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field>
+            <Label>Starts (optional)</Label>
+            <Input type="datetime-local" value={eventStarts} onChange={(e) => setEventStarts(e.target.value)} />
+          </Field>
+          <Field>
+            <Label>Ends (optional)</Label>
+            <Input type="datetime-local" value={eventEnds} onChange={(e) => setEventEnds(e.target.value)} />
+          </Field>
+          <div className="sm:col-span-2 space-y-1">
+            <Label>Location (optional)</Label>
+            <Input placeholder="Room / link / address" value={eventLocation} onChange={(e) => setEventLocation(e.target.value)} />
+          </div>
+        </div>
+      )}
       <Field>
         <Label>Announcement Content</Label>
         <Textarea placeholder="Write your cluster-wide announcement…" value={content} onChange={(e) => setContent(e.target.value)} autoFocus />

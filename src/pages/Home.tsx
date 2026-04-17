@@ -45,7 +45,7 @@ const timeAgo = (iso: string) => {
 type FeedTab = "my-feed" | "trending";
 
 const Home = () => {
-  const { token } = useAuth();
+  const { token, uid } = useAuth();
   const [searchParams] = useSearchParams();
   const urlTab = searchParams.get("tab");
   const [tab, setTab] = useState<FeedTab>(
@@ -104,8 +104,8 @@ const Home = () => {
     setUserNames(userMap);
   };
 
-  const loadFeed = useCallback(async (t: FeedTab) => {
-    setLoading(true);
+  const loadFeed = useCallback(async (t: FeedTab, background = false) => {
+    if (!background) setLoading(true);
     try {
       let fetched: PostResponse[] = [];
       if (t === "my-feed" && token) {
@@ -124,11 +124,16 @@ const Home = () => {
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, [token]);
 
-  useEffect(() => { loadFeed(tab); }, [tab]);
+  useEffect(() => { 
+    loadFeed(tab); 
+    const iv = setInterval(() => loadFeed(tab, true), 10000);
+    return () => clearInterval(iv);
+  }, [tab, loadFeed]);
+  
   // Switch to trending if not logged in
   useEffect(() => { if (!token) setTab("trending"); }, [token]);
 
@@ -194,7 +199,8 @@ const Home = () => {
                     id: post.pid,
                     cid: post.cid,
                     uid: post.uid,
-                    community: clusterNames[post.cid] ?? post.cid.slice(0, 8),
+                    viewerUid: uid ?? undefined,
+                    community: post.megaphone?.cluster_name ?? clusterNames[post.cid] ?? post.cid.slice(0, 8),
                     author: userNames[post.uid] ?? post.uid.slice(0, 8),
                     timeAgo: timeAgo(post.created_at),
                     title: post.content?.slice(0, 80) ?? "(no content)",

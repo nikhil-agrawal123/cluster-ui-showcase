@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { fetchMyBookmarkedClusters, sharePostToCluster, BookmarkedCluster } from "@/lib/api";
+import { fetchMyBookmarkedClusters, fetchMyJoinedClusters, sharePostToCluster, BookmarkedCluster } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Loader2, Share2, Hash } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -30,8 +30,14 @@ export function ShareToClusterModal({ pid, isOpen, onClose, onSuccess }: ShareTo
   async function loadClusters() {
     setLoading(true);
     try {
-      const data = await fetchMyBookmarkedClusters();
-      setClusters(data);
+      const [bookmarked, joined] = await Promise.all([
+        fetchMyBookmarkedClusters(),
+        fetchMyJoinedClusters()
+      ]);
+      const map = new Map();
+      bookmarked.forEach(c => map.set(c.cid, c));
+      joined.forEach(c => map.set(c.cid, c as any));
+      setClusters(Array.from(map.values()));
     } catch (err: any) {
       toast({ title: "Error", description: "Failed to load your clusters.", variant: "destructive" });
     } finally {

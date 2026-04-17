@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Calendar, MapPin, Clock, UserPlus, UserCheck, FileText,
-  MessageSquare, Users, ThumbsUp, ThumbsDown, Grid3X3,
+  MessageSquare, Users, ThumbsUp, Grid3X3, ArrowRight, Info,
 } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import Navbar from "@/components/layout/Navbar";
@@ -17,9 +17,13 @@ import {
   unfollowUser,
   checkFollowStatus,
   getClusterDetail,
+  fetchCommentsForPost,
+  fetchUserFollowers,
+  fetchUserFollowing,
   type UserProfileResponse,
   type PostResponse,
 } from "@/lib/api";
+import PostCard from "@/components/feed/PostCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
@@ -35,7 +39,7 @@ const timeAgo = (iso: string) => {
   return `${Math.floor(hours / 24)}d ago`;
 };
 
-type Tab = "posts" | "comments" | "about";
+type Tab = "posts" | "comments" | "about" | "followers" | "following";
 
 const UserPublicProfilePage = () => {
   const { uid: targetUid } = useParams<{ uid: string }>();
@@ -46,9 +50,13 @@ const UserPublicProfilePage = () => {
   const [posts, setPosts] = useState<PostResponse[]>([]);
   const [comments, setComments] = useState<any[]>([]);
   const [clusterNames, setClusterNames] = useState<Record<string, string>>({});
+  const [postCommentCounts, setPostCommentCounts] = useState<Record<string, number>>({});
+  const [followersList, setFollowersList] = useState<{ uid: string; name: string; bio: string | null }[]>([]);
+  const [followingList, setFollowingList] = useState<{ uid: string; name: string; bio: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [loadingComments, setLoadingComments] = useState(false);
+  const [loadingSocial, setLoadingSocial] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
@@ -66,33 +74,72 @@ const UserPublicProfilePage = () => {
   }, [targetUid]);
 
   useEffect(() => {
+    if (profile?.follower_count != null) setFollowerCount(profile.follower_count);
+  }, [profile]);
+
+  useEffect(() => {
     if (!targetUid || !token) return;
     checkFollowStatus(targetUid)
-      .then((d) => { setIsFollowing(d.is_following); setFollowerCount(d.follower_count); })
+      .then((d) => {
+        setIsFollowing(d.is_following);
+        setFollowerCount(d.follower_count);
+      })
       .catch(() => {});
   }, [targetUid, token]);
 
   useEffect(() => {
     if (!targetUid) return;
     setLoadingPosts(true);
-    getUserRecentPosts(targetUid, 20)
-      .then((data) => {
+    getUserRecentPosts(targetUid, 30)
+      .then(async (data) => {
         setPosts(data);
-        // Resolve cluster names
-        const uniqueCids = [...new Set(data.map((p: any) => p.cid))];
+        const counts: Record<string, number> = {};
+        await Promise.all(
+          data.map(async (p) => {
+            try {
+              const c = await fetchCommentsForPost(p.pid);
+              counts[p.pid] = c.length;
+            } catch {
+              counts[p.pid] = 0;
+            }
+          })
+        );
+        setPostCommentCounts(counts);
+        const uniqueCids = [...new Set(data.map((p) => p.cid))];
         const nameMap: Record<string, string> = {};
-        Promise.allSettled(
+        await Promise.allSettled(
           uniqueCids.map(async (cid) => {
             try {
               const c = await getClusterDetail(cid);
               nameMap[cid] = c.name;
-            } catch { nameMap[cid] = (cid as string).slice(0, 8); }
+            } catch {
+              nameMap[cid] = cid.slice(0, 8);
+            }
           })
-        ).then(() => setClusterNames((prev) => ({ ...prev, ...nameMap })));
+        );
+        setClusterNames((prev) => ({ ...prev, ...nameMap }));
       })
       .catch(() => setPosts([]))
       .finally(() => setLoadingPosts(false));
   }, [targetUid]);
+
+  useEffect(() => {
+    if (!targetUid || activeTab !== "followers") return;
+    setLoadingSocial(true);
+    fetchUserFollowers(targetUid)
+      .then(setFollowersList)
+      .catch(() => setFollowersList([]))
+      .finally(() => setLoadingSocial(false));
+  }, [targetUid, activeTab]);
+
+  useEffect(() => {
+    if (!targetUid || activeTab !== "following") return;
+    setLoadingSocial(true);
+    fetchUserFollowing(targetUid)
+      .then(setFollowingList)
+      .catch(() => setFollowingList([]))
+      .finally(() => setLoadingSocial(false));
+  }, [targetUid, activeTab]);
 
   useEffect(() => {
     if (!targetUid) return;
@@ -157,7 +204,9 @@ const UserPublicProfilePage = () => {
   const tabs: { id: Tab; label: string; icon: any }[] = [
     { id: "posts", label: "Posts", icon: Grid3X3 },
     { id: "comments", label: "Comments", icon: MessageSquare },
-    { id: "about", label: "About", icon: Users },
+    { id: "followers", label: "Followers", icon: Users },
+    { id: "following", label: "Following", icon: ArrowRight },
+    { id: "about", label: "About", icon: Info },
   ];
 
   return (
@@ -239,12 +288,12 @@ const UserPublicProfilePage = () => {
 
             {/* Tabs */}
             <div className="bg-card rounded-2xl shadow-surface">
-              <div className="flex border-b border-border">
+              <div className="flex border-b border-border overflow-x-auto scrollbar-thin">
                 {tabs.map((t) => (
                   <button
                     key={t.id}
                     onClick={() => setActiveTab(t.id)}
-                    className={`flex-1 flex items-center justify-center gap-2 py-4 text-sm font-medium transition-colors relative ${
+                    className={`flex-1 min-w-[5.5rem] shrink-0 flex items-center justify-center gap-1.5 py-3 sm:py-4 px-1 text-xs sm:text-sm font-medium transition-colors relative ${
                       activeTab === t.id ? "text-accent" : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
@@ -265,28 +314,38 @@ const UserPublicProfilePage = () => {
                     {!loadingPosts && posts.length === 0 && (
                       <p className="text-muted-foreground text-center py-12">No posts yet.</p>
                     )}
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       {posts.map((post, i) => (
                         <motion.div
                           key={post.pid}
                           initial={{ opacity: 0, y: 4 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: i * 0.03 }}
-                          className="bg-muted/50 rounded-xl p-4 border border-border hover:shadow-surface transition-all"
                         >
-                          <Link to={`/post/${post.pid}`}>
-                            <p className="text-sm text-foreground leading-relaxed line-clamp-2 hover:text-accent transition-colors">
-                              {post.content || "(no content)"}
-                            </p>
-                          </Link>
-                          <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                            <Link to={`/cluster/${post.cid}`} className="text-accent hover:underline">
-                              c/{clusterNames[post.cid] ?? post.cid.slice(0, 8)}
-                            </Link>
-                            <span className="flex items-center gap-1"><ThumbsUp className="h-3 w-3" /> {post.likes ?? 0}</span>
-                            <span className="flex items-center gap-1"><ThumbsDown className="h-3 w-3" /> {post.dislikes ?? 0}</span>
-                            <span>{timeAgo(post.created_at)}</span>
-                          </div>
+                          <PostCard
+                            post={{
+                              id: post.pid,
+                              cid: post.cid,
+                              uid: post.uid,
+                              viewerUid: myUid ?? undefined,
+                              community:
+                                post.megaphone?.cluster_name ??
+                                clusterNames[post.cid] ??
+                                post.cid.slice(0, 8),
+                              author: profile.name,
+                              timeAgo: timeAgo(post.created_at),
+                              title: post.content?.slice(0, 80) ?? "(no content)",
+                              excerpt:
+                                post.content && post.content.length > 80
+                                  ? post.content.slice(80, 260)
+                                  : undefined,
+                              votes: (post.likes ?? 0) - (post.dislikes ?? 0),
+                              comments: postCommentCounts[post.pid] ?? 0,
+                              type: post.type,
+                              megaphone: post.megaphone,
+                              window_origin: post.window_origin,
+                            }}
+                          />
                         </motion.div>
                       ))}
                     </div>
@@ -324,6 +383,64 @@ const UserPublicProfilePage = () => {
                   </motion.div>
                 )}
 
+                {activeTab === "followers" && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+                    <h2 className="text-lg font-semibold text-foreground mb-4">
+                      Followers ({followersList.length})
+                    </h2>
+                    {loadingSocial && (
+                      <p className="text-sm text-muted-foreground text-center py-8">Loading…</p>
+                    )}
+                    {!loadingSocial && followersList.length === 0 && (
+                      <p className="text-muted-foreground text-center py-10">No followers yet.</p>
+                    )}
+                    {followersList.map((u) => (
+                      <Link
+                        key={u.uid}
+                        to={`/user/${u.uid}`}
+                        className="flex items-center gap-3 p-3 rounded-xl bg-muted/50 border border-border hover:border-accent/40 hover:bg-muted transition-all"
+                      >
+                        <div className="w-9 h-9 rounded-full bg-accent/10 flex items-center justify-center text-accent text-sm font-bold shrink-0">
+                          {u.name?.[0]?.toUpperCase() ?? "?"}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">{u.name}</p>
+                          {u.bio && <p className="text-xs text-muted-foreground truncate">{u.bio}</p>}
+                        </div>
+                      </Link>
+                    ))}
+                  </motion.div>
+                )}
+
+                {activeTab === "following" && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+                    <h2 className="text-lg font-semibold text-foreground mb-4">
+                      Following ({followingList.length})
+                    </h2>
+                    {loadingSocial && (
+                      <p className="text-sm text-muted-foreground text-center py-8">Loading…</p>
+                    )}
+                    {!loadingSocial && followingList.length === 0 && (
+                      <p className="text-muted-foreground text-center py-10">Not following anyone yet.</p>
+                    )}
+                    {followingList.map((u) => (
+                      <Link
+                        key={u.uid}
+                        to={`/user/${u.uid}`}
+                        className="flex items-center gap-3 p-3 rounded-xl bg-muted/50 border border-border hover:border-accent/40 hover:bg-muted transition-all"
+                      >
+                        <div className="w-9 h-9 rounded-full bg-accent/10 flex items-center justify-center text-accent text-sm font-bold shrink-0">
+                          {u.name?.[0]?.toUpperCase() ?? "?"}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">{u.name}</p>
+                          {u.bio && <p className="text-xs text-muted-foreground truncate">{u.bio}</p>}
+                        </div>
+                      </Link>
+                    ))}
+                  </motion.div>
+                )}
+
                 {/* About Tab */}
                 {activeTab === "about" && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
@@ -332,7 +449,20 @@ const UserPublicProfilePage = () => {
                         { label: "Member since", value: joinedDate, icon: Calendar },
                         profile.location && { label: "Location", value: profile.location, icon: MapPin },
                         { label: "Last active", value: new Date(profile.last_active).toLocaleDateString(), icon: Clock },
-                        { label: "Followers", value: `${followerCount} people`, icon: Users },
+                        {
+                          label: "Followers",
+                          value: `${followerCount} people`,
+                          icon: Users,
+                        },
+                        ...(profile.following_count != null
+                          ? [
+                              {
+                                label: "Following",
+                                value: `${profile.following_count} people`,
+                                icon: ArrowRight,
+                              },
+                            ]
+                          : []),
                       ].filter(Boolean).map((item: any, i) => (
                         <div key={i} className="bg-muted/50 rounded-xl p-4 flex items-center gap-3 border border-border">
                           <item.icon className="h-4 w-4 text-accent shrink-0" />

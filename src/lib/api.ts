@@ -73,6 +73,9 @@ export interface UserProfileResponse {
   profile_image: string | null;
   created_at: string;
   last_active: string;
+  /** Present on `GET /users/{uid}` and `/users/me/profile` */
+  follower_count?: number | null;
+  following_count?: number | null;
 }
 
 export async function getMyProfile(): Promise<UserProfileResponse> {
@@ -171,6 +174,20 @@ export interface PostResponse {
     type: string;
     is_active: boolean;
     subscriber_count: number;
+    cluster_cid?: string;
+    cluster_name?: string | null;
+    poll?: {
+      options: { idx: number; label: string; votes: number }[];
+      total_votes: number;
+      my_vote?: number | null;
+    };
+    event?: {
+      starts_at: string | null;
+      ends_at: string | null;
+      location: string | null;
+      counts: { GOING: number; MAYBE: number; NOT_GOING: number; total_rsvps: number };
+      my_status?: string | null;
+    };
   };
   /** For WINDOW posts, the source post info */
   window_origin?: {
@@ -228,6 +245,10 @@ export async function createMegaphone(payload: {
   tags?: string;
   megaphone_type?: "ANNOUNCEMENT" | "POLL" | "EVENT";
   duration_hours?: number;
+  poll_options?: string[];
+  event_starts_at?: string | null;
+  event_ends_at?: string | null;
+  event_location?: string | null;
 }): Promise<any> {
   const res = await fetch(`${API_BASE}/posts/megaphone/create`, {
     method: "POST",
@@ -266,6 +287,34 @@ export async function fetchWindowOrigin(pid: string): Promise<any> {
 
 export async function fetchMegaphoneInfo(pid: string): Promise<any> {
   const res = await fetch(`${API_BASE}/posts/${pid}/megaphone-info`);
+  return handleResponse<any>(res);
+}
+
+export async function fetchMegaphoneEngagement(pid: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/posts/${pid}/megaphone/engagement`, {
+    headers: { ...authHeaders() },
+  });
+  return handleResponse<any>(res);
+}
+
+export async function voteMegaphonePoll(pid: string, optionIndex: number): Promise<any> {
+  const res = await fetch(`${API_BASE}/posts/${pid}/megaphone/poll/vote`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ option_index: optionIndex }),
+  });
+  return handleResponse<any>(res);
+}
+
+export async function rsvpMegaphoneEvent(
+  pid: string,
+  status: "GOING" | "MAYBE" | "NOT_GOING"
+): Promise<any> {
+  const res = await fetch(`${API_BASE}/posts/${pid}/megaphone/event/rsvp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ status }),
+  });
   return handleResponse<any>(res);
 }
 
@@ -453,11 +502,21 @@ export interface PostReactionResponse {
   current_reaction: "LIKE" | "DISLIKE" | null;
 }
 
-export async function fetchMyPostReaction(pid: string): Promise<{ reaction: "LIKE" | "DISLIKE" | null }> {
+export async function fetchMyPostReaction(
+  pid: string
+): Promise<{ reaction: "LIKE" | "DISLIKE" | "LOVE" | null }> {
   const res = await fetch(`${API_BASE}/posts/${pid}/reaction/me`, {
     headers: { ...authHeaders() },
   });
-  return handleResponse<{ reaction: "LIKE" | "DISLIKE" | null }>(res);
+  return handleResponse<{ reaction: "LIKE" | "DISLIKE" | "LOVE" | null }>(res);
+}
+
+/** Per-type reaction counts (LIKE, DISLIKE, LOVE, …) for display chips */
+export async function fetchPostReactionStats(
+  pid: string
+): Promise<{ reaction_type: string; count: number }[]> {
+  const res = await fetch(`${API_BASE}/posts/${pid}/reactions/stats`);
+  return handleResponse<{ reaction_type: string; count: number }[]>(res);
 }
 
 export async function removeMyPostReaction(pid: string): Promise<PostReactionResponse> {
