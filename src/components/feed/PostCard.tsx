@@ -22,6 +22,15 @@ const ActionButton = ({ icon, label }: { icon: React.ReactNode; label: string })
   </button>
 );
 
+const CommentButton = ({ postId, commentCount }: { postId: string; commentCount: number }) => (
+  <Link to={`/post/${postId}`}>
+    <button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-1 px-2 rounded-md hover:bg-muted">
+      <MessageSquare className="h-4 w-4" />
+      <span>{commentCount} {commentCount === 1 ? 'Comment' : 'Comments'}</span>
+    </button>
+  </Link>
+);
+
 const PostCard = ({ post }: { post: PostData }) => {
   return (
     <motion.div
@@ -59,7 +68,7 @@ const PostCard = ({ post }: { post: PostData }) => {
             </div>
           )}
           <footer className="flex items-center gap-1 pt-1">
-            <ActionButton icon={<MessageSquare className="h-4 w-4" />} label={`${post.comments} Comments`} />
+            <CommentButton postId={post.id} commentCount={post.comments} />
             <ActionButton icon={<Share2 className="h-4 w-4" />} label="Share" />
             <ActionButton icon={<Bookmark className="h-4 w-4" />} label="Save" />
           </footer>

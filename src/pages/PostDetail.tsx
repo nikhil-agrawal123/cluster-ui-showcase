@@ -1,13 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Heart, MessageSquare, Share2, Bookmark } from "lucide-react";
+import { ArrowLeft, MessageSquare } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import Navbar from "@/components/layout/Navbar";
 import VoteControl from "@/components/feed/VoteControl";
 import CommentNode, { type CommentNodeComment } from "@/components/thread/CommentNode";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { createComment, fetchCommentsForPost, type CommentResponse } from "@/lib/api";
+import {
+  createComment,
+  fetchCommentsForPost,
+  fetchPostById,
+  type CommentResponse,
+  type PostResponse,
+} from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { posts, comments } from "@/lib/mockData";
@@ -32,14 +38,56 @@ const timeAgo = (iso: string) => {
 
 const PostDetail = () => {
   const { id } = useParams();
-  const post = posts.find((p) => p.id === id) || posts[0];
+  const fallbackPost = posts.find((p) => p.id === id) || posts[0];
   const { uid, token } = useAuth();
   const { toast } = useToast();
   const [commentText, setCommentText] = useState("");
+  const [apiPost, setApiPost] = useState<PostResponse | null>(null);
+  const [loadingPost, setLoadingPost] = useState(false);
   const [apiComments, setApiComments] = useState<CommentResponse[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
   const [postingComment, setPostingComment] = useState(false);
   const [replyingToMid, setReplyingToMid] = useState<string | null>(null);
+
+  const isApiPost = Boolean(id && isUuid(id));
+
+  const displayPost = useMemo(() => {
+    if (apiPost) {
+      const content = apiPost.content ?? "(no content)";
+      return {
+        id: apiPost.pid,
+        community: apiPost.cid.slice(0, 8),
+        author: apiPost.uid.slice(0, 8),
+        timeAgo: timeAgo(apiPost.created_at),
+        title: content.length > 100 ? `${content.slice(0, 100)}...` : content,
+        excerpt: content,
+        votes: (apiPost.likes ?? 0) - (apiPost.dislikes ?? 0),
+        comments: apiComments.length,
+      };
+    }
+    return {
+      ...fallbackPost,
+      comments: isApiPost ? apiComments.length : fallbackPost.comments,
+    };
+  }, [apiPost, fallbackPost, apiComments.length, isApiPost]);
+
+  const loadPost = async () => {
+    if (!id || !isUuid(id)) {
+      setApiPost(null);
+      return;
+    }
+
+    setLoadingPost(true);
+    try {
+      const row = await fetchPostById(id);
+      setApiPost(row);
+    } catch (err: any) {
+      setApiPost(null);
+      toast({ title: "Failed to load post", description: err.message, variant: "destructive" });
+    } finally {
+      setLoadingPost(false);
+    }
+  };
 
   const loadComments = async () => {
     if (!id || !isUuid(id)) {
@@ -57,6 +105,10 @@ const PostDetail = () => {
       setLoadingComments(false);
     }
   };
+
+  useEffect(() => {
+    loadPost();
+  }, [id]);
 
   useEffect(() => {
     loadComments();
@@ -121,7 +173,7 @@ const PostDetail = () => {
       setPostingComment(true);
       await createComment({ uid, pid: id, content });
       setCommentText("");
-      await loadComments();
+      await Promise.all([loadComments(), loadPost()]);
       toast({ title: "Comment posted", description: "Your comment is now live." });
     } catch (err: any) {
       toast({ title: "Failed to post", description: err.message, variant: "destructive" });
@@ -150,7 +202,7 @@ const PostDetail = () => {
     try {
       setReplyingToMid(parentMid);
       await createComment({ uid, pid: id, parent_mid: parentMid, content: clean });
-      await loadComments();
+      await Promise.all([loadComments(), loadPost()]);
       toast({ title: "Reply posted", description: "Your reply is now live." });
     } catch (err: any) {
       toast({ title: "Failed to reply", description: err.message, variant: "destructive" });
@@ -165,12 +217,12 @@ const PostDetail = () => {
       <div className="max-w-[1000px] mx-auto px-4 lg:px-6 py-6">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-6">
-          <Link to="/" className="hover:text-foreground flex items-center gap-1">
+          <Link to="/feed" className="hover:text-foreground flex items-center gap-1">
             <ArrowLeft className="h-4 w-4" />
             Home
           </Link>
           <span>/</span>
-          <Link to="/cluster" className="hover:text-foreground">c/{post.community}</Link>
+          <Link to="/cluster" className="hover:text-foreground">c/{displayPost.community}</Link>
           <span>/</span>
           <span className="text-foreground">Window View</span>
         </div>
@@ -184,16 +236,16 @@ const PostDetail = () => {
             className="flex-1 min-w-0"
           >
             <h1 className="text-3xl font-bold tracking-tight text-foreground text-balance mb-4">
-              {post.title}
+              {displayPost.title}
             </h1>
 
             <div className="flex items-center gap-3 mb-6">
               <Avatar className="h-10 w-10">
-                <AvatarFallback className="bg-muted text-sm font-semibold">{post.author[0].toUpperCase()}</AvatarFallback>
+                <AvatarFallback className="bg-muted text-sm font-semibold">{displayPost.author[0].toUpperCase()}</AvatarFallback>
               </Avatar>
               <div>
-                <p className="text-sm font-semibold text-foreground">{post.author}</p>
-                <p className="text-xs text-muted-foreground">{post.timeAgo}</p>
+                <p className="text-sm font-semibold text-foreground">u/{displayPost.author}</p>
+                <p className="text-xs text-muted-foreground">{displayPost.timeAgo}</p>
               </div>
               <Button variant="default" size="sm" className="ml-auto bg-accent text-accent-foreground hover:bg-accent/90 rounded-full h-8 px-4 text-xs">
                 Follow
@@ -201,26 +253,20 @@ const PostDetail = () => {
             </div>
 
             <div className="prose prose-slate max-w-none text-foreground/90 leading-relaxed space-y-4 mb-6">
-              <p>{post.excerpt || "This is a detailed exploration of the topic at hand. The community has been actively discussing the implications and potential solutions."}</p>
-              <p>Minimalism has always been a cornerstone of modern digital design, but 2024 is ushering in a new era. We're moving beyond the sterile whitespace of the past decade into something more expressive yet equally focused.</p>
-              <h2 className="text-xl font-semibold text-foreground mt-8">1. Intentional Motion</h2>
-              <p>Motion is no longer just "eye candy." In 2024, it's used to guide the user's focus. Subtle transitions between states help maintain context without overwhelming the visual field.</p>
-              <h2 className="text-xl font-semibold text-foreground mt-8">2. Depth and Layering</h2>
-              <p>We're seeing a return to depth through shadows and blurs, but with a refined touch. Glassmorphism is evolving into more sophisticated layering systems that create hierarchy without the need for high-contrast borders.</p>
-              <blockquote className="border-l-4 border-accent pl-4 italic text-muted-foreground my-6">
-                "Clarity is not the absence of complexity, but the mastery of it."
-              </blockquote>
-              <p>As we look forward, the challenge remains: how to provide enough information for power users while keeping the interface approachable for everyone else.</p>
+              {loadingPost && isApiPost && <p>Loading post...</p>}
+              {!loadingPost && (
+                <p>{displayPost.excerpt || "This post has no body content yet."}</p>
+              )}
             </div>
 
             {/* Engagement */}
             <div className="flex items-center gap-3 py-4 border-t border-border">
               <div className="flex items-center gap-1">
-                <VoteControl count={post.votes} vertical={false} postId={post.id} />
+                <VoteControl count={displayPost.votes} vertical={false} postId={displayPost.id} />
               </div>
               <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground px-3 py-1.5 rounded-full bg-muted">
                 <MessageSquare className="h-4 w-4" />
-                {threadedComments.length} Comments
+                {displayPost.comments} Comments
               </button>
             </div>
 

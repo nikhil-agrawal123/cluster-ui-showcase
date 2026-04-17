@@ -171,6 +171,11 @@ export async function fetchPosts(skip = 0, limit = 50): Promise<PostResponse[]> 
   return handleResponse<PostResponse[]>(res);
 }
 
+export async function fetchPostById(pid: string): Promise<PostResponse> {
+  const res = await fetch(`${API_BASE}/posts/${pid}`);
+  return handleResponse<PostResponse>(res);
+}
+
 export interface PostCreatePayload {
   uid: string;
   cid: string;
@@ -346,6 +351,15 @@ export async function createComment(payload: CommentCreatePayload): Promise<Comm
 
 export async function reactToPost(pid: string, uid: string, reaction_type: string): Promise<any> {
   const res = await fetch(`${API_BASE}/posts/${pid}/react`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ uid, reaction_type }),
+  });
+  return handleResponse<any>(res);
+}
+
+export async function reactToComment(mid: string, uid: string, reaction_type: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/comments/${mid}/react`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ uid, reaction_type }),
