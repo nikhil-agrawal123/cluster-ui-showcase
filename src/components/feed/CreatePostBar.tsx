@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, X, FileText, Megaphone, Hash, Users2, Pencil,
@@ -80,37 +81,42 @@ interface ModalShellProps {
   children: React.ReactNode;
 }
 
-const ModalShell = ({ title, icon, iconBg, onClose, children }: ModalShellProps) => (
-  <motion.div
-    variants={overlayVariants}
-    initial="hidden"
-    animate="visible"
-    exit="hidden"
-    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-    onClick={onClose}
-  >
+const ModalShell = ({ title, icon, iconBg, onClose, children }: ModalShellProps) => {
+  const modal = (
     <motion.div
-      variants={modalVariants}
+      variants={overlayVariants}
       initial="hidden"
       animate="visible"
       exit="hidden"
-      transition={{ type: "spring", damping: 24, stiffness: 300 }}
-      className="bg-card rounded-2xl shadow-2xl w-full max-w-lg"
-      onClick={(e) => e.stopPropagation()}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm max-h-screen overflow-y-auto"
+      onClick={onClose}
     >
-      <div className="flex items-center gap-3 px-6 pt-5 pb-4 border-b border-border">
-        <div className={`w-9 h-9 rounded-xl ${iconBg} flex items-center justify-center`}>
-          {icon}
+      <motion.div
+        variants={modalVariants}
+        initial="hidden"
+        animate="visible"
+        exit="hidden"
+        transition={{ type: "spring", damping: 24, stiffness: 300 }}
+        className="bg-card rounded-2xl shadow-2xl w-full max-w-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 px-6 pt-5 pb-4 border-b border-border">
+          <div className={`w-9 h-9 rounded-xl ${iconBg} flex items-center justify-center`}>
+            {icon}
+          </div>
+          <h2 className="text-base font-semibold text-foreground flex-1">{title}</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors rounded-lg p-1 hover:bg-muted">
+            <X className="h-4 w-4" />
+          </button>
         </div>
-        <h2 className="text-base font-semibold text-foreground flex-1">{title}</h2>
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors rounded-lg p-1 hover:bg-muted">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-      <div className="px-6 py-5 space-y-4">{children}</div>
+        <div className="px-6 py-5 space-y-4">{children}</div>
+      </motion.div>
     </motion.div>
-  </motion.div>
-);
+  );
+
+  if (typeof document === "undefined") return null;
+  return createPortal(modal, document.body);
+};
 
 // ---- Field helpers ----------------------------------------------------------
 
@@ -295,7 +301,7 @@ const MegaphoneModal = ({ clusters, onClose, onCreated, uid }: {
         </Field>
       </div>
       {megType === "POLL" && (
-        <div className="space-y-2">
+        <div className="space-y-2 ">
           <Label>Poll choices</Label>
           {pollOptions.map((opt, i) => (
             <Input
