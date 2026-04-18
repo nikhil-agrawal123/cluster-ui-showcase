@@ -3,7 +3,7 @@ import { useRef, useState, useEffect } from "react";
 import {
   Calendar, MapPin, Sparkles, Clock, Users, Grid3X3,
   Pencil, Search, SlidersHorizontal, ArrowRight, Plus,
-  ThumbsUp, ThumbsDown, MessageSquare, Save, X, FileText,
+  ThumbsUp, MessageSquare, Save, X, FileText,
 } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,25 @@ import {
   getUserTopPosts,
   getUserTopComments,
   updateMyProfile,
+  fetchUserFollowers,
+  fetchUserFollowing,
+  fetchCommentsForPost,
+  getClusterDetail,
+  type PostResponse,
 } from "@/lib/api";
+import { Link } from "react-router-dom";
+import PostCard from "@/components/feed/PostCard";
+
+const timeAgo = (iso: string) => {
+  const then = new Date(iso).getTime();
+  const diffMs = Math.max(0, Date.now() - then);
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+};
 
 const ProfilePage = () => {
   const { token, uid, profile, login } = useAuth();
@@ -30,10 +48,15 @@ const ProfilePage = () => {
   const headerY = useTransform(scrollYProgress, [0, 1], [0, 50]);
 
   // Data states
-  const [userPosts, setUserPosts] = useState<any[]>([]);
+  const [userPosts, setUserPosts] = useState<PostResponse[]>([]);
+  const [postsMetaReady, setPostsMetaReady] = useState(false);
+  const [postCommentCounts, setPostCommentCounts] = useState<Record<string, number>>({});
+  const [postClusterNames, setPostClusterNames] = useState<Record<string, string>>({});
   const [postDistribution, setPostDistribution] = useState<any[]>([]);
   const [topPosts, setTopPosts] = useState<any[]>([]);
   const [topComments, setTopComments] = useState<any[]>([]);
+  const [followers, setFollowers] = useState<any[]>([]);
+  const [following, setFollowing] = useState<any[]>([]);
   const [loadingTab, setLoadingTab] = useState(false);
 
   // Edit profile states
@@ -43,35 +66,95 @@ const ProfilePage = () => {
   const [editLocation, setEditLocation] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Load data when tab changes
+  // Load all posts + cluster/comment meta once for this user (feeds My Posts + stat card)
   useEffect(() => {
     if (!uid) return;
-    setLoadingTab(true);
-
-    const loadData = async () => {
+    let cancelled = false;
+    setPostsMetaReady(false);
+    (async () => {
       try {
-        if (activeTab === "posts" && userPosts.length === 0) {
-          const posts = await getUserPosts(uid);
-          setUserPosts(posts);
+        const posts = await getUserPosts(uid);
+        if (cancelled) return;
+        setUserPosts(posts);
+        const counts: Record<string, number> = {};
+        await Promise.all(
+          posts.map(async (p) => {
+            try {
+              const c = await fetchCommentsForPost(p.pid);
+              counts[p.pid] = c.length;
+            } catch {
+              counts[p.pid] = 0;
+            }
+          })
+        );
+        const cids = [...new Set(posts.map((p) => p.cid))];
+        const nm: Record<string, string> = {};
+        await Promise.all(
+          cids.map(async (cid) => {
+            try {
+              const cl = await getClusterDetail(cid);
+              nm[cid] = cl.name;
+            } catch {
+              nm[cid] = cid.slice(0, 8);
+            }
+          })
+        );
+        if (!cancelled) {
+          setPostCommentCounts(counts);
+          setPostClusterNames(nm);
+          setPostsMetaReady(true);
         }
-        if (activeTab === "analytics") {
-          const [dist, top, comments] = await Promise.all([
-            postDistribution.length === 0 ? getUserPostDistribution(uid) : Promise.resolve(postDistribution),
-            topPosts.length === 0 ? getUserTopPosts(uid, 5) : Promise.resolve(topPosts),
-            topComments.length === 0 ? getUserTopComments(uid, 5) : Promise.resolve(topComments),
-          ]);
-          setPostDistribution(dist);
-          setTopPosts(top);
-          setTopComments(comments);
-        }
-      } catch (err: any) {
-        console.error("Failed to load tab data:", err);
-      } finally {
-        setLoadingTab(false);
+      } catch (err) {
+        console.error("Failed to load user posts:", err);
       }
+    })();
+    return () => {
+      cancelled = true;
     };
-    loadData();
+  }, [uid]);
+
+  useEffect(() => {
+    if (!uid || activeTab !== "analytics") return;
+    setLoadingTab(true);
+    Promise.all([
+      getUserPostDistribution(uid),
+      getUserTopPosts(uid, 5),
+      getUserTopComments(uid, 5),
+    ])
+      .then(([dist, top, comments]) => {
+        setPostDistribution(dist);
+        setTopPosts(top);
+        setTopComments(comments);
+      })
+      .catch((e) => console.error(e))
+      .finally(() => setLoadingTab(false));
   }, [activeTab, uid]);
+
+  useEffect(() => {
+    if (!uid || activeTab !== "followers") return;
+    setLoadingTab(true);
+    fetchUserFollowers(uid)
+      .then(setFollowers)
+      .catch(() => setFollowers([]))
+      .finally(() => setLoadingTab(false));
+  }, [activeTab, uid]);
+
+  useEffect(() => {
+    if (!uid || activeTab !== "following") return;
+    setLoadingTab(true);
+    fetchUserFollowing(uid)
+      .then(setFollowing)
+      .catch(() => setFollowing([]))
+      .finally(() => setLoadingTab(false));
+  }, [activeTab, uid]);
+
+  useEffect(() => {
+    if (activeTab === "settings" && profile) {
+      setEditName(profile.name);
+      setEditBio(profile.bio ?? "");
+      setEditLocation(profile.location ?? "");
+    }
+  }, [activeTab, profile]);
 
   const startEditing = () => {
     setEditName(profile?.name || "");
@@ -115,14 +198,16 @@ const ProfilePage = () => {
   const lastActive = new Date(profile.last_active).toLocaleString();
 
   const statCards = [
-    { label: "Total Posts", value: userPosts.length || "—", icon: FileText },
+    { label: "Total Posts", value: postsMetaReady ? userPosts.length : "—", icon: FileText },
     { label: "Last Active", value: lastActive.split(",")[0], icon: Clock },
-    { label: "Post Clusters", value: postDistribution.length || "—", icon: Users },
+    { label: "Post Clusters", value: postsMetaReady ? new Set(userPosts.map((p) => p.cid)).size : "—", icon: Users },
     { label: "Member Since", value: joinedDate, icon: Calendar },
   ];
 
   const tabs = [
     { id: "posts", label: "My Posts", icon: Grid3X3 },
+    { id: "followers", label: "Followers", icon: Users },
+    { id: "following", label: "Following", icon: ArrowRight },
     { id: "analytics", label: "Analytics", icon: Sparkles },
     { id: "settings", label: "Settings", icon: SlidersHorizontal },
   ];
@@ -272,41 +357,95 @@ const ProfilePage = () => {
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-lg font-semibold text-foreground">
-                    Your Posts ({userPosts.length})
+                    Your Posts ({postsMetaReady ? userPosts.length : "…"})
                   </h2>
                 </div>
-                {loadingTab && <p className="text-sm text-muted-foreground text-center py-8">Loading…</p>}
-                {!loadingTab && userPosts.length === 0 && (
-                  <p className="text-muted-foreground text-center py-12">You haven't posted anything yet.</p>
+                {!postsMetaReady && (
+                  <p className="text-sm text-muted-foreground text-center py-8">Loading your posts…</p>
                 )}
-                <div className="space-y-3">
-                  {userPosts.slice(0, 20).map((post: any, i: number) => (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.03 }}
-                      className="bg-muted/50 rounded-xl p-4 border border-border hover:shadow-surface transition-all"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-foreground leading-relaxed line-clamp-2">
-                            {post[2] || post.content || "(no content)"}
-                          </p>
-                          <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <ThumbsUp className="h-3 w-3" /> {post[3] ?? post.likes ?? 0}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <ThumbsDown className="h-3 w-3" /> {post[4] ?? post.dislikes ?? 0}
-                            </span>
-                            <span>{post[5] || post.created_at || ""}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
+                {postsMetaReady && userPosts.length === 0 && (
+                  <p className="text-muted-foreground text-center py-12">You haven&apos;t posted anything yet.</p>
+                )}
+                <div className="space-y-4">
+                  {postsMetaReady &&
+                    userPosts.map((post, i) => (
+                      <motion.div
+                        key={post.pid}
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.03 }}
+                      >
+                        <PostCard
+                          post={{
+                            id: post.pid,
+                            cid: post.cid,
+                            uid: post.uid,
+                            viewerUid: uid ?? undefined,
+                            community:
+                              post.megaphone?.cluster_name ??
+                              postClusterNames[post.cid] ??
+                              post.cid.slice(0, 8),
+                            author: profile?.name ?? "You",
+                            timeAgo: timeAgo(post.created_at),
+                            title: post.content?.slice(0, 80) ?? "(no content)",
+                            excerpt:
+                              post.content && post.content.length > 80
+                                ? post.content.slice(80, 260)
+                                : undefined,
+                            votes: (post.likes ?? 0) - (post.dislikes ?? 0),
+                            comments: postCommentCounts[post.pid] ?? 0,
+                            type: post.type,
+                            megaphone: post.megaphone,
+                            window_origin: post.window_origin,
+                          }}
+                        />
+                      </motion.div>
+                    ))}
                 </div>
+              </motion.div>
+            )}
+
+            {/* Followers Tab */}
+            {activeTab === "followers" && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+                <h2 className="text-lg font-semibold text-foreground mb-4">Followers ({followers.length})</h2>
+                {loadingTab && <p className="text-sm text-muted-foreground text-center py-8">Loading…</p>}
+                {!loadingTab && followers.length === 0 && (
+                  <p className="text-muted-foreground text-center py-10">No followers yet.</p>
+                )}
+                {followers.map((u: any) => (
+                  <Link key={u.uid} to={`/user/${u.uid}`} className="flex items-center gap-3 p-3 rounded-xl bg-muted/50 border border-border hover:border-accent/40 hover:bg-muted transition-all">
+                    <div className="w-9 h-9 rounded-full bg-accent/10 flex items-center justify-center text-accent text-sm font-bold shrink-0">
+                      {u.name?.[0]?.toUpperCase() ?? "?"}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{u.name}</p>
+                      {u.bio && <p className="text-xs text-muted-foreground truncate">{u.bio}</p>}
+                    </div>
+                  </Link>
+                ))}
+              </motion.div>
+            )}
+
+            {/* Following Tab */}
+            {activeTab === "following" && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+                <h2 className="text-lg font-semibold text-foreground mb-4">Following ({following.length})</h2>
+                {loadingTab && <p className="text-sm text-muted-foreground text-center py-8">Loading…</p>}
+                {!loadingTab && following.length === 0 && (
+                  <p className="text-muted-foreground text-center py-10">You're not following anyone yet.</p>
+                )}
+                {following.map((u: any) => (
+                  <Link key={u.uid} to={`/user/${u.uid}`} className="flex items-center gap-3 p-3 rounded-xl bg-muted/50 border border-border hover:border-accent/40 hover:bg-muted transition-all">
+                    <div className="w-9 h-9 rounded-full bg-accent/10 flex items-center justify-center text-accent text-sm font-bold shrink-0">
+                      {u.name?.[0]?.toUpperCase() ?? "?"}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{u.name}</p>
+                      {u.bio && <p className="text-xs text-muted-foreground truncate">{u.bio}</p>}
+                    </div>
+                  </Link>
+                ))}
               </motion.div>
             )}
 
@@ -325,10 +464,10 @@ const ProfilePage = () => {
                       {postDistribution.map((item: any, i: number) => (
                         <div key={i} className="bg-muted/50 rounded-lg p-3 flex items-center justify-between border border-border">
                           <span className="text-sm text-foreground font-medium truncate">
-                            {item[0] || item.cluster_name || `Cluster #${i + 1}`}
+                            {item.cluster_name ?? item[1] ?? `Cluster #${i + 1}`}
                           </span>
                           <span className="text-sm font-bold text-accent tabular-nums">
-                            {item[1] || item.post_count || 0} posts
+                            {item.post_count ?? item[2] ?? 0} posts
                           </span>
                         </div>
                       ))}
@@ -343,17 +482,21 @@ const ProfilePage = () => {
                       <ThumbsUp className="h-4 w-4 text-accent" /> Top Liked Posts
                     </h3>
                     <div className="space-y-2">
-                      {topPosts.map((post: any, i: number) => (
-                        <div key={i} className="bg-muted/50 rounded-lg p-3 border border-border">
-                          <p className="text-sm text-foreground line-clamp-1">
-                            {post[1] || post.content || "(no content)"}
+                      {topPosts.map((post: any) => (
+                        <Link
+                          key={post.pid ?? post[0]}
+                          to={`/post/${post.pid ?? post[0]}`}
+                          className="block bg-muted/50 rounded-lg p-3 border border-border hover:border-accent/40 transition-colors"
+                        >
+                          <p className="text-sm text-foreground line-clamp-2">
+                            {post.content ?? post[1] ?? "(no content)"}
                           </p>
                           <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
                             <span className="flex items-center gap-1 text-accent font-medium">
-                              <ThumbsUp className="h-3 w-3" /> {post[2] ?? post.likes ?? 0} likes
+                              <ThumbsUp className="h-3 w-3" /> {post.likes ?? post[2] ?? 0} likes
                             </span>
                           </div>
-                        </div>
+                        </Link>
                       ))}
                     </div>
                   </div>
@@ -366,15 +509,19 @@ const ProfilePage = () => {
                       <MessageSquare className="h-4 w-4 text-accent" /> Top Comments
                     </h3>
                     <div className="space-y-2">
-                      {topComments.map((comment: any, i: number) => (
-                        <div key={i} className="bg-muted/50 rounded-lg p-3 border border-border">
+                      {topComments.map((comment: any) => (
+                        <Link
+                          key={comment.mid ?? comment[0]}
+                          to={`/post/${comment.pid ?? comment[3]}`}
+                          className="block bg-muted/50 rounded-lg p-3 border border-border hover:border-accent/40 transition-colors"
+                        >
                           <p className="text-sm text-foreground line-clamp-2">
-                            {comment[1] || comment.content || "(no content)"}
+                            {comment.content ?? comment[1] ?? "(no content)"}
                           </p>
                           <span className="text-xs text-accent font-medium mt-1 inline-flex items-center gap-1">
-                            <ThumbsUp className="h-3 w-3" /> {comment[2] ?? comment.likes ?? 0} likes
+                            <ThumbsUp className="h-3 w-3" /> {comment.likes ?? comment[2] ?? 0} likes
                           </span>
-                        </div>
+                        </Link>
                       ))}
                     </div>
                   </div>

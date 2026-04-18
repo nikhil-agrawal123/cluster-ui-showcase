@@ -1,8 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
 import { ThumbsUp, MessageSquare, ChevronDown, ChevronUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { reactToComment, getCommentReaction } from "@/lib/api";
+
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
 export interface CommentNodeComment {
   id: string;
@@ -23,9 +28,51 @@ interface CommentNodeProps {
 const CommentNode = ({ comment, depth = 0, onReply, replyingToMid = null }: CommentNodeProps) => {
   const [expanded, setExpanded] = useState(true);
   const [liked, setLiked] = useState(false);
+  const [likesCount, setLikesCount] = useState(comment.likes);
+  const [liking, setLiking] = useState(false);
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [replyText, setReplyText] = useState("");
   const isReplying = replyingToMid === comment.id;
+  const { uid, token } = useAuth();
+  const { toast } = useToast();
+
+  // Restore like state from server on mount
+  useEffect(() => {
+    if (!token || !comment.id) return;
+    getCommentReaction(comment.id)
+      .then((data) => {
+        if (data.reaction_type === "LIKE") setLiked(true);
+      })
+      .catch(() => {}); // silently ignore — network may not be available
+  }, [comment.id, token]);
+
+  const handleLike = async () => {
+    if (liking) return;
+
+    if (!token || !uid) {
+      toast({ title: "Not logged in", description: "Please log in to like comments.", variant: "destructive" });
+      return;
+    }
+
+    // Optimistic update
+    const wasLiked = liked;
+    setLiked(!liked);
+    setLikesCount((prev) => (liked ? prev - 1 : prev + 1));
+
+    try {
+      setLiking(true);
+      const result = await reactToComment(comment.id, uid, "LIKE");
+      // Update with authoritative count from server
+      setLikesCount(result.likes);
+    } catch (err: any) {
+      // Revert on failure
+      setLiked(wasLiked);
+      setLikesCount(comment.likes);
+      toast({ title: "Failed to like", description: err.message, variant: "destructive" });
+    } finally {
+      setLiking(false);
+    }
+  };
 
   const handleReplySubmit = async () => {
     const content = replyText.trim();
@@ -57,13 +104,14 @@ const CommentNode = ({ comment, depth = 0, onReply, replyingToMid = null }: Comm
             <p className="text-sm text-foreground/90 leading-relaxed">{comment.content}</p>
             <div className="flex items-center gap-3 mt-2">
               <button
-                onClick={() => setLiked(!liked)}
+                onClick={handleLike}
+                disabled={liking}
                 className={`flex items-center gap-1 text-xs transition-colors ${
                   liked ? "text-accent" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <ThumbsUp className="h-3.5 w-3.5" />
-                <span className="tabular-nums">{liked ? comment.likes + 1 : comment.likes}</span>
+                <span className="tabular-nums">{likesCount}</span>
               </button>
               <button
                 onClick={() => setShowReplyInput((prev) => !prev)}
@@ -78,7 +126,7 @@ const CommentNode = ({ comment, depth = 0, onReply, replyingToMid = null }: Comm
                   className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
                 >
                   {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                  {expanded ? "Collapse" : "Expand"}
+                  {expanded ? "Collapse" : `Show ${comment.replies.length} repl${comment.replies.length === 1 ? "y" : "ies"}`}
                 </button>
               )}
             </div>
